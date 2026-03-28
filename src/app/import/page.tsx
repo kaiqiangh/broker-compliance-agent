@@ -54,12 +54,30 @@ export default function ImportPage() {
     setLoading(true);
 
     try {
-      // TODO: call /api/import with confirm action to actually persist
-      // For now, simulate success
+      // Re-upload the file to actually import (server already parsed during preview)
+      const file = fileRef.current?.files?.[0];
+      if (!file) {
+        setError('File not found. Please re-upload.');
+        setStep('upload');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('confirm', 'true');
+
+      const res = await fetch('/api/import', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Import failed');
+        return;
+      }
+
       setImportResult({
-        imported: preview.rowCount,
+        imported: data.rowCount || preview.rowCount,
         skipped: 0,
-        errors: preview.errorCount,
+        errors: data.errorCount || preview.errorCount,
       });
       setStep('complete');
     } catch (err) {

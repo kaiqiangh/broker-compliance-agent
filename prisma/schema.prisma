@@ -11,11 +11,11 @@ datasource db {
 
 model Firm {
   id                String   @id @default(uuid())
-  name              String
-  cbiRegistration   String?  @map("cbi_registration")
-  subscriptionTier  String   @default("starter") @map("subscription_tier")
-  subscriptionStatus String  @default("active") @map("subscription_status")
-  gdprStatus        String   @default("active") @map("gdpr_status")
+  name              String   @db.VarChar(255)
+  cbiRegistration   String?  @map("cbi_registration") @db.VarChar(100)
+  subscriptionTier  String   @default("starter") @map("subscription_tier") @db.VarChar(50)
+  subscriptionStatus String  @default("active") @map("subscription_status") @db.VarChar(50)
+  gdprStatus        String   @default("active") @map("gdpr_status") @db.VarChar(50)
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -38,11 +38,11 @@ model Firm {
 model User {
   id                String    @id @default(uuid())
   firmId            String    @map("firm_id")
-  email             String    @unique
-  passwordHash      String    @map("password_hash")
-  name              String
-  role              String    // firm_admin, compliance_officer, adviser, read_only
-  pcfRole           String?   @map("pcf_role") // PCF-1, PCF-5, PCF-8 (Phase 2)
+  email             String    @unique @db.VarChar(255)
+  passwordHash      String    @map("password_hash") @db.VarChar(255)
+  name              String    @db.VarChar(255)
+  role              String    @db.VarChar(50) // firm_admin, compliance_officer, adviser, read_only
+  pcfRole           String?   @map("pcf_role") @db.VarChar(50)
   isActive          Boolean   @default(true) @map("is_active")
   lastLoginAt       DateTime? @map("last_login_at")
   createdAt         DateTime  @default(now()) @map("created_at")
@@ -60,10 +60,10 @@ model User {
 model Client {
   id        String   @id @default(uuid())
   firmId    String   @map("firm_id")
-  name      String
-  email     String?
-  phone     String?
-  address   String?
+  name      String   @db.VarChar(255)
+  email     String?  @db.VarChar(255)
+  phone     String?  @db.VarChar(50)
+  address   String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

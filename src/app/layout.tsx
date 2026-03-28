@@ -1,10 +1,23 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Broker Compliance',
+  title: 'BrokerComply',
   description: 'Insurance Broker Compliance & Renewal Readiness Platform',
 };
+
+// Simple server-side session reader (matches in-memory session store in lib/auth.ts)
+// In production, replace with NextAuth session
+function getSessionUser() {
+  try {
+    // The session cookie is set by login/register API
+    // For SSR, we just show a generic sidebar — the client pages handle their own auth state
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export default function RootLayout({
   children,
@@ -38,13 +51,18 @@ export default function RootLayout({
             <div className="p-4 border-t border-gray-200">
               <div className="flex items-center">
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                  MO
+                  ?
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium">Michael O'Brien</p>
-                  <p className="text-xs text-gray-500">Firm Admin</p>
+                  <p className="text-sm font-medium">Loading...</p>
+                  <p className="text-xs text-gray-500">—</p>
                 </div>
               </div>
+              <form action="/api/auth/logout" method="POST" className="mt-3">
+                <button type="submit" className="text-xs text-gray-500 hover:text-red-600">
+                  Sign out
+                </button>
+              </form>
             </div>
           </aside>
 
