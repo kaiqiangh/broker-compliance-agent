@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { calculateRenewalStatus, calculateRenewalTimeline, daysBetween } from '../lib/dates';
+import { prisma } from '../lib/prisma';
+import { calculateRenewalStatus, daysBetween } from '../lib/dates';
 import { CHECKLIST_DEFINITIONS } from '../lib/checklist-state';
-
-const prisma = new PrismaClient();
 
 export class RenewalService {
   /**

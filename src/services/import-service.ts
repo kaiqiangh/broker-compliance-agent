@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { parseCSV, type ParsedPolicy } from '../lib/csv-parser';
-import { computeDedupHash, normalizePolicyNumber, normalizeInsurerName } from '../lib/dedup';
-import { formatISODate } from '../lib/dates';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma';
+import { parseCSV } from './csv-parser';
+import { computeDedupHash, normalizePolicyNumber } from './dedup';
 
 export interface ImportResult {
   importId: string;
@@ -17,30 +14,24 @@ export interface ImportResult {
 }
 
 export class ImportService {
-  /**
-   * Parse a CSV file and return results without importing
-   */
   async preview(buffer: Buffer, overrideFormat?: string) {
     return parseCSV(buffer, overrideFormat);
   }
 
-  /**
-   * Import policies from a parsed CSV
-   */
   async import(
     firmId: string,
     buffer: Buffer,
     importedBy: string,
+    fileName: string = 'upload.csv',
     overrideFormat?: string
   ): Promise<ImportResult> {
     const parsed = parseCSV(buffer, overrideFormat);
 
-    // Create import record
     const importRecord = await prisma.import.create({
       data: {
         firmId,
         sourceFormat: parsed.format,
-        fileName: 'upload.csv',
+        fileName,
         totalRows: parsed.policies.length + parsed.errors.length,
         importedRows: 0,
         skippedRows: 0,
@@ -62,13 +53,12 @@ export class ImportService {
           inceptionDate: policy.inceptionDate,
         });
 
-        // Check for existing policy by dedup hash
+        // Tier 1: exact hash match
         const existing = await prisma.policy.findFirst({
           where: { firmId, dedupHash },
         });
 
         if (existing) {
-          // Check if anything changed
           const hasChanges =
             existing.premium.toNumber() !== policy.premium ||
             existing.expiryDate.toISOString().slice(0, 10) !== policy.expiryDate;
@@ -90,15 +80,13 @@ export class ImportService {
           continue;
         }
 
-        // Check by normalized policy number
+        // Tier 2: normalized policy number match
         const normalizedNumber = normalizePolicyNumber(policy.policyNumber);
         const byNumber = await prisma.policy.findFirst({
           where: { firmId, policyNumberNormalized: normalizedNumber },
         });
 
         if (byNumber) {
-          // Same number, different hash — potential duplicate
-          // For now, update with higher confidence number match
           await prisma.policy.update({
             where: { id: byNumber.id },
             data: {
@@ -114,7 +102,7 @@ export class ImportService {
 
         // New policy — find or create client
         let client = await prisma.client.findFirst({
-          where: { firmId, name: policy.clientName },
+          where: { firmId, name: { equals: policy.clientName, mode: 'insensitive' } },
         });
 
         if (!client) {
@@ -127,7 +115,6 @@ export class ImportService {
           });
         }
 
-        // Create policy
         await prisma.policy.create({
           data: {
             firmId,
@@ -139,7 +126,7 @@ export class ImportService {
             inceptionDate: new Date(policy.inceptionDate),
             expiryDate: new Date(policy.expiryDate),
             premium: policy.premium,
-            ncb: policy.ncb || null,
+            ncb: policy.ncb ?? null,
             policyStatus: policy.status || 'active',
             dedupHash,
             dedupConfidence: 1.0,
@@ -148,8 +135,9 @@ export class ImportService {
         });
         importedCount++;
       } catch (err) {
+        const rowIdx = parsed.policies.indexOf(policy) + 2;
         parsed.errors.push({
-          row: parsed.policies.indexOf(policy) + 2,
+          row: rowIdx,
           field: '*',
           error: `Import error: ${(err as Error).message}`,
           rawValue: '',
@@ -157,7 +145,6 @@ export class ImportService {
       }
     }
 
-    // Update import record
     await prisma.import.update({
       where: { id: importRecord.id },
       data: {
@@ -167,7 +154,6 @@ export class ImportService {
       },
     });
 
-    // Log audit event
     await prisma.auditEvent.create({
       data: {
         firmId,
@@ -176,6 +162,7 @@ export class ImportService {
         entityType: 'import',
         entityId: importRecord.id,
         metadata: {
+          fileName,
           format: parsed.format,
           totalRows: parsed.policies.length,
           imported: importedCount,

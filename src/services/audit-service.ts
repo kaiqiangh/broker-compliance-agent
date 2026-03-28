@@ -1,11 +1,7 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
+import type { Prisma } from '@prisma/client';
 
 export class AuditService {
-  /**
-   * Log an audit event
-   */
   async log(params: {
     firmId: string;
     actorId?: string;
@@ -22,15 +18,12 @@ export class AuditService {
         action: params.action,
         entityType: params.entityType,
         entityId: params.entityId,
-        metadata: params.metadata || {},
+        metadata: (params.metadata ?? {}) as Prisma.InputJsonValue,
         ipAddress: params.ipAddress,
       },
     });
   }
 
-  /**
-   * Query audit events with filters
-   */
   async query(firmId: string, filters?: {
     startDate?: Date;
     endDate?: Date;
@@ -41,7 +34,7 @@ export class AuditService {
     limit?: number;
     offset?: number;
   }) {
-    const where: any = { firmId };
+    const where: Prisma.AuditEventWhereInput = { firmId };
 
     if (filters?.startDate || filters?.endDate) {
       where.timestamp = {};
@@ -57,8 +50,8 @@ export class AuditService {
       prisma.auditEvent.findMany({
         where,
         orderBy: { timestamp: 'desc' },
-        take: filters?.limit || 50,
-        skip: filters?.offset || 0,
+        take: filters?.limit ?? 50,
+        skip: filters?.offset ?? 0,
       }),
       prisma.auditEvent.count({ where }),
     ]);
@@ -66,9 +59,6 @@ export class AuditService {
     return { events, total };
   }
 
-  /**
-   * Export audit events as CSV for CBI inspection
-   */
   async exportCSV(firmId: string, filters?: {
     startDate?: Date;
     endDate?: Date;
@@ -81,14 +71,19 @@ export class AuditService {
     const headers = ['Timestamp', 'Actor', 'Action', 'Entity Type', 'Entity ID', 'Metadata'];
     const rows = events.map(e => [
       e.timestamp.toISOString(),
-      e.actorId || '',
+      e.actorId ?? '',
       e.action,
       e.entityType,
-      e.entityId || '',
+      e.entityId ?? '',
       JSON.stringify(e.metadata),
     ]);
 
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+    const escapeCsvField = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [
+      headers.map(escapeCsvField).join(','),
+      ...rows.map(r => r.map(escapeCsvField).join(',')),
+    ].join('\n');
+
     return csv;
   }
 }

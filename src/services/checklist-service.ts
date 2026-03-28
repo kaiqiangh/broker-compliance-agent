@@ -1,13 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { transitionChecklistItem, type ChecklistStatus, ITEMS_REQUIRING_SIGN_OFF } from '../lib/checklist-state';
 import { calculateRenewalStatus } from '../lib/dates';
-
-const prisma = new PrismaClient();
+import type { ChecklistItemType } from '../lib/checklist-state';
 
 export class ChecklistService {
-  /**
-   * Mark a checklist item as completed (adviser action)
-   */
   async completeItem(
     firmId: string,
     itemId: string,
@@ -26,34 +22,25 @@ export class ChecklistService {
     );
 
     if (!transition.success) {
-      throw new Error((transition as { success: false; error: string }).error);
+      throw new Error(transition.success === false ? transition.error : 'Unknown error');
     }
 
-    const requiresSignOff = ITEMS_REQUIRING_SIGN_OFF.includes(item.itemType as any);
+    const requiresSignOff = (ITEMS_REQUIRING_SIGN_OFF as readonly string[]).includes(item.itemType);
+    const targetStatus: ChecklistStatus = requiresSignOff ? 'pending_review' : 'completed';
 
     const updated = await prisma.checklistItem.update({
       where: { id: itemId },
       data: {
-        status: requiresSignOff ? 'completed' : 'completed',
+        status: targetStatus,
         completedBy,
         completedAt: new Date(),
-        evidenceUrl: evidence?.url || null,
-        notes: evidence?.notes || null,
+        evidenceUrl: evidence?.url ?? null,
+        notes: evidence?.notes ?? null,
       },
     });
 
-    // If requires sign-off, move to pending_review
-    if (requiresSignOff) {
-      await prisma.checklistItem.update({
-        where: { id: itemId },
-        data: { status: 'pending_review' },
-      });
-    }
-
-    // Update renewal status
     await this.updateRenewalStatus(firmId, item.renewalId);
 
-    // Log audit event
     await prisma.auditEvent.create({
       data: {
         firmId,
@@ -61,19 +48,13 @@ export class ChecklistService {
         action: 'checklist.item_completed',
         entityType: 'checklist_item',
         entityId: itemId,
-        metadata: {
-          itemType: item.itemType,
-          requiresSignOff,
-        },
+        metadata: { itemType: item.itemType, requiresSignOff, targetStatus },
       },
     });
 
     return updated;
   }
 
-  /**
-   * Approve a checklist item (compliance officer action)
-   */
   async approveItem(
     firmId: string,
     itemId: string,
@@ -92,7 +73,7 @@ export class ChecklistService {
     );
 
     if (!transition.success) {
-      throw new Error((transition as { success: false; error: string }).error);
+      throw new Error(transition.success === false ? transition.error : 'Unknown error');
     }
 
     const updated = await prisma.checklistItem.update({
@@ -101,14 +82,14 @@ export class ChecklistService {
         status: 'approved',
         approvedBy,
         approvedAt: new Date(),
-        notes: comment ? `${item.notes || ''}\n[Approved]: ${comment}`.trim() : item.notes,
+        notes: comment
+          ? [item.notes, `[Approved by ${approvedBy}]: ${comment}`].filter(Boolean).join('\n')
+          : item.notes,
       },
     });
 
-    // Update renewal status
     await this.updateRenewalStatus(firmId, item.renewalId);
 
-    // Log audit event
     await prisma.auditEvent.create({
       data: {
         firmId,
@@ -123,9 +104,6 @@ export class ChecklistService {
     return updated;
   }
 
-  /**
-   * Reject a checklist item (compliance officer action)
-   */
   async rejectItem(
     firmId: string,
     itemId: string,
@@ -144,7 +122,7 @@ export class ChecklistService {
     );
 
     if (!transition.success) {
-      throw new Error((transition as { success: false; error: string }).error);
+      throw new Error(transition.success === false ? transition.error : 'Unknown error');
     }
 
     const updated = await prisma.checklistItem.update({
@@ -155,10 +133,8 @@ export class ChecklistService {
       },
     });
 
-    // Update renewal status
     await this.updateRenewalStatus(firmId, item.renewalId);
 
-    // Log audit event
     await prisma.auditEvent.create({
       data: {
         firmId,
@@ -173,17 +149,16 @@ export class ChecklistService {
     return updated;
   }
 
-  /**
-   * Get checklist for a renewal
-   */
   async getRenewalChecklist(firmId: string, renewalId: string) {
     const items = await prisma.checklistItem.findMany({
       where: { firmId, renewalId },
       orderBy: { createdAt: 'asc' },
     });
 
+    const signOffTypes = ITEMS_REQUIRING_SIGN_OFF as readonly string[];
+
     const completedCount = items.filter(
-      i => i.status === 'approved' || (i.status === 'completed' && !ITEMS_REQUIRING_SIGN_OFF.includes(i.itemType as any))
+      i => i.status === 'approved' || (i.status === 'completed' && !signOffTypes.includes(i.itemType))
     ).length;
 
     return {
@@ -194,9 +169,6 @@ export class ChecklistService {
     };
   }
 
-  /**
-   * Recalculate renewal status based on checklist completion
-   */
   private async updateRenewalStatus(firmId: string, renewalId: string) {
     const renewal = await prisma.renewal.findFirst({
       where: { id: renewalId, firmId },
