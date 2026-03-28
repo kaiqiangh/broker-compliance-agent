@@ -27,19 +27,23 @@ export class NotificationService {
     let scheduled = 0;
 
     for (const config of REMINDER_CONFIGS) {
-      // Find renewals that are at the right number of days from expiry
-      const targetDate = new Date(now);
-      targetDate.setDate(targetDate.getDate() + config.daysBeforeExpiry);
+      // Find renewals that should receive this reminder type.
+      // Use a day RANGE, not an exact day, so reminders aren't missed if worker doesn't run precisely.
+      const minDays = config.type === 'overdue' ? -999 : config.daysBeforeExpiry;
+      const maxDays = config.type === '40_day' ? 999 :
+                       config.type === '20_day' ? 40 :
+                       config.type === '7_day' ? 20 :
+                       config.type === '1_day' ? 7 : 1;
 
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
+      const minDate = new Date(now);
+      minDate.setDate(minDate.getDate() - maxDays);
+      const maxDate = new Date(now);
+      maxDate.setDate(maxDate.getDate() - minDays);
 
-      // For overdue: find renewals past due date without overdue reminder
+      // For overdue: find renewals past due date
       const dateFilter = config.type === 'overdue'
         ? { dueDate: { lt: now } }
-        : { dueDate: { gte: startOfDay, lte: endOfDay } };
+        : { dueDate: { gt: minDate, lte: maxDate } };
 
       const renewals = await prisma.renewal.findMany({
         where: {

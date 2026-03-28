@@ -43,14 +43,22 @@ export const POST = withAuth('complete_items', async (user, request) => {
     return NextResponse.json({ error: 'Checklist item not found' }, { status: 404 });
   }
 
-  // In production: upload to S3/R2. For now: store file reference.
+  // Store file to disk (in production: upload to S3/R2)
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileHash = Buffer.from(
     await crypto.subtle.digest('SHA-256', buffer)
   ).toString('hex').slice(0, 16);
 
-  const fileName = `${user.firmId}/${checklistItemId}/${fileHash}-${file.name}`;
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileName = `${user.firmId}/${checklistItemId}/${fileHash}-${safeName}`;
   const fileUrl = `uploads/${fileName}`;
+
+  // Write to local filesystem (production: replace with S3/R2)
+  const fs = await import('fs/promises');
+  const path = await import('path');
+  const uploadDir = path.join(process.cwd(), 'uploads', user.firmId, checklistItemId);
+  await fs.mkdir(uploadDir, { recursive: true });
+  await fs.writeFile(path.join(uploadDir, `${fileHash}-${safeName}`), buffer);
 
   // Update checklist item with evidence URL
   await prisma.checklistItem.update({

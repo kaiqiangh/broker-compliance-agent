@@ -49,6 +49,7 @@ model User {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   firm              Firm      @relation(fields: [firmId], references: [id])
+  advisedPolicies   Policy[]  @relation("PolicyAdviser")
 
   @@index([firmId])
   @@index([email])
@@ -96,6 +97,7 @@ model Policy {
 
   firm                  Firm      @relation(fields: [firmId], references: [id])
   client                Client    @relation(fields: [clientId], references: [id])
+  adviser               User?     @relation(fields: [adviserId], references: [id])
   renewals              Renewal[]
 
   @@index([firmId])

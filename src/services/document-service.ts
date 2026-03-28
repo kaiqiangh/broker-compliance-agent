@@ -132,6 +132,7 @@ export class DocumentService {
           include: {
             client: true,
             firm: true,
+            adviser: true,
           },
         },
         firm: true,
@@ -155,8 +156,8 @@ export class DocumentService {
         ncb: renewal.policy.ncb,
         firmName: renewal.firm.name,
         firmAddress: '',
-        adviserName: 'Adviser', // TODO: resolve from policy.adviserId
-        commissionRate: 12.5, // TODO: resolve from policy data
+        adviserName: renewal.policy.adviser?.name || 'Adviser',
+        commissionRate: 12.5, // TODO: add commission_rate field to Policy model
         cpcVersion: '2012',
       });
     }
