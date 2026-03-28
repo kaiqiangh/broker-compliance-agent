@@ -1,0 +1,47 @@
+import { NextResponse } from 'next/server';
+import { registerFirm, createSession } from '@/lib/auth';
+import { z } from 'zod';
+
+const RegisterSchema = z.object({
+  firmName: z.string().min(1).max(255),
+  email: z.string().email(),
+  password: z.string().min(8),
+  name: z.string().min(1).max(255),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const data = RegisterSchema.parse(body);
+
+    const { firmId, user } = await registerFirm({
+      firmName: data.firmName,
+      adminEmail: data.email,
+      adminPassword: data.password,
+      adminName: data.name,
+    });
+
+    const token = createSession(user);
+
+    const response = NextResponse.json({
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      firmId,
+    });
+
+    response.cookies.set('session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 8 * 60 * 60,
+      path: '/',
+    });
+
+    return response;
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Invalid input', details: err.errors }, { status: 400 });
+    }
+    console.error('Register error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
