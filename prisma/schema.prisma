@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══ FIRMS & USERS ═══
+
+model Firm {
+  id                String   @id @default(uuid())
+  name              String
+  cbiRegistration   String?  @map("cbi_registration")
+  subscriptionTier  String   @default("starter") @map("subscription_tier")
+  subscriptionStatus String  @default("active") @map("subscription_status")
+  gdprStatus        String   @default("active") @map("gdpr_status")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  users             User[]
+  clients           Client[]
+  policies          Policy[]
+  renewals          Renewal[]
+  checklistItems    ChecklistItem[]
+  documents         Document[]
+  imports           Import[]
+  auditEvents       AuditEvent[]
+  notifications     Notification[]
+  pcfRoles          PCFRole[]
+  conductTrainings  ConductTraining[]
+  attestations      Attestation[]
+
+  @@map("firms")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  firmId            String    @map("firm_id")
+  email             String    @unique
+  passwordHash      String    @map("password_hash")
+  name              String
+  role              String    // firm_admin, compliance_officer, adviser, read_only
+  pcfRole           String?   @map("pcf_role") // PCF-1, PCF-5, PCF-8 (Phase 2)
+  isActive          Boolean   @default(true) @map("is_active")
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  firm              Firm      @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+  @@index([email])
+  @@map("users")
+}
+
+// ═══ CLIENTS & POLICIES ═══
+
+model Client {
+  id        String   @id @default(uuid())
+  firmId    String   @map("firm_id")
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  policies  Policy[]
+
+  @@index([firmId])
+  @@map("clients")
+}
+
+model Policy {
+  id                    String    @id @default(uuid())
+  firmId                String    @map("firm_id")
+  clientId              String    @map("client_id")
+  policyNumber          String    @map("policy_number")
+  policyNumberNormalized String?  @map("policy_number_normalized")
+  policyType            String    @map("policy_type") // motor, home, commercial, life, health
+  insurerName           String    @map("insurer_name")
+  inceptionDate         DateTime  @map("inception_date")
+  expiryDate            DateTime  @map("expiry_date")
+  premium               Decimal   @db.Decimal(10, 2)
+  ncb                   Int?
+  policyStatus          String    @default("active") @map("policy_status") // active, cancelled, lapsed, not_in_export
+  dedupHash             String?   @map("dedup_hash")
+  dedupConfidence       Decimal   @default(1.0) @map("dedup_confidence") @db.Decimal(3, 2)
+  adviserId             String?   @map("adviser_id")
+  importId              String?   @map("import_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  firm                  Firm      @relation(fields: [firmId], references: [id])
+  client                Client    @relation(fields: [clientId], references: [id])
+  renewals              Renewal[]
+
+  @@index([firmId])
+  @@index([clientId])
+  @@index([expiryDate])
+  @@index([firmId, policyNumberNormalized])
+  @@index([firmId, dedupHash])
+  @@index([firmId, policyStatus])
+  @@map("policies")
+}
+
+// ═══ RENEWALS & CHECKLIST ═══
+
+model Renewal {
+  id          String   @id @default(uuid())
+  firmId      String   @map("firm_id")
+  policyId    String   @map("policy_id")
+  dueDate     DateTime @map("due_date")
+  status      String   @default("pending") // pending, in_progress, at_risk, compliant, overdue
+  newPremium  Decimal? @map("new_premium") @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  firm        Firm              @relation(fields: [firmId], references: [id])
+  policy      Policy            @relation(fields: [policyId], references: [id])
+  checklistItems ChecklistItem[]
+  documents   Document[]
+  notifications Notification[]
+
+  @@index([firmId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("renewals")
+}
+
+model ChecklistItem {
+  id             String    @id @default(uuid())
+  firmId         String    @map("firm_id")
+  renewalId      String    @map("renewal_id")
+  itemType       String    @map("item_type") // renewal_notification, suitability_assessment, etc.
+  status         String    @default("pending") // pending, in_progress, completed, pending_review, approved, rejected
+  assignedTo     String?   @map("assigned_to")
+  completedBy    String?   @map("completed_by")
+  completedAt    DateTime? @map("completed_at")
+  approvedBy     String?   @map("approved_by")
+  approvedAt     DateTime? @map("approved_at")
+  rejectionReason String?  @map("rejection_reason")
+  evidenceUrl    String?   @map("evidence_url")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  firm           Firm      @relation(fields: [firmId], references: [id])
+  renewal        Renewal   @relation(fields: [renewalId], references: [id])
+
+  @@index([renewalId])
+  @@index([status])
+  @@map("checklist_items")
+}
+
+// ═══ DOCUMENTS ═══
+
+model Document {
+  id           String    @id @default(uuid())
+  firmId       String    @map("firm_id")
+  renewalId    String?   @map("renewal_id")
+  documentType String    @map("document_type") // renewal_notification, suitability_assessment, inspection_pack
+  fileUrl      String    @map("file_url")
+  generatedBy  String?   @map("generated_by")
+  status       String    @default("pending") // pending, generating, completed, failed
+  cpcVersion   String    @default("2012") @map("cpc_version")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  firm         Firm      @relation(fields: [firmId], references: [id])
+  renewal      Renewal?  @relation(fields: [renewalId], references: [id])
+
+  @@index([firmId])
+  @@index([renewalId])
+  @@index([status])
+  @@map("documents")
+}
+
+// ═══ IMPORTS ═══
+
+model Import {
+  id            String   @id @default(uuid())
+  firmId        String   @map("firm_id")
+  sourceFormat  String   @map("source_format") // applied_epic, acturis, generic_csv
+  fileName      String   @map("file_name")
+  totalRows     Int      @map("total_rows")
+  importedRows  Int      @map("imported_rows")
+  skippedRows   Int      @default(0) @map("skipped_rows")
+  errorRows     Int      @default(0) @map("error_rows")
+  importedBy    String?  @map("imported_by")
+  importedAt    DateTime @default(now()) @map("imported_at")
+
+  firm          Firm     @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+  @@map("imports")
+}
+
+// ═══ AUDIT ═══
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  firmId     String   @map("firm_id")
+  timestamp  DateTime @default(now())
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json     @default("{}")
+  ipAddress  String?  @map("ip_address")
+
+  firm       Firm     @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, timestamp(sort: Desc)])
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@map("audit_events")
+}
+
+// ═══ NOTIFICATIONS & JOBS ═══
+
+model Notification {
+  id           String    @id @default(uuid())
+  firmId       String    @map("firm_id")
+  renewalId    String?   @map("renewal_id")
+  reminderType String    @map("reminder_type") // 40_day, 20_day, 7_day, 1_day, overdue
+  sentTo       String    @map("sent_to")
+  sentAt       DateTime  @default(now()) @map("sent_at")
+
+  firm         Firm      @relation(fields: [firmId], references: [id])
+  renewal      Renewal?  @relation(fields: [renewalId], references: [id])
+
+  @@unique([renewalId, reminderType])
+  @@index([firmId])
+  @@map("notifications")
+}
+
+model ScheduledJob {
+  id           String    @id @default(uuid())
+  jobType      String    @map("job_type")
+  payload      Json
+  scheduledFor DateTime  @map("scheduled_for")
+  status       String    @default("pending") // pending, running, completed, failed
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3) @map("max_attempts")
+  lastError    String?   @map("last_error")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([status, scheduledFor])
+  @@map("scheduled_jobs")
+}
+
+// ═══ PHASE 2: IAF ═══
+
+model PCFRole {
+  id                   String    @id @default(uuid())
+  firmId               String    @map("firm_id")
+  userId               String    @map("user_id")
+  roleType             String    @map("role_type") // PCF-1, PCF-5, PCF-8
+  status               String    @default("pending")
+  lastConfirmationDate DateTime? @map("last_confirmation_date")
+  nextConfirmationDate DateTime? @map("next_confirmation_date")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  firm                 Firm      @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+  @@map("pcf_roles")
+}
+
+model ConductTraining {
+  id           String    @id @default(uuid())
+  firmId       String    @map("firm_id")
+  userId       String    @map("user_id")
+  moduleId     String    @map("module_id")
+  moduleName   String    @map("module_name")
+  completedAt  DateTime? @map("completed_at")
+  score        Int?
+  evidenceUrl  String?   @map("evidence_url")
+
+  firm         Firm      @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+  @@map("conduct_trainings")
+}
+
+model Attestation {
+  id          String    @id @default(uuid())
+  firmId      String    @map("firm_id")
+  userId      String    @map("user_id")
+  type        String    // F&P, conflicts, AML, conduct
+  dueDate     DateTime  @map("due_date")
+  completedAt DateTime? @map("completed_at")
+  status      String    @default("pending")
+  signedBy    String?   @map("signed_by")
+
+  firm        Firm      @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+  @@map("attestations")
+}
