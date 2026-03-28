@@ -123,6 +123,8 @@ export function getSession(token: string): SessionUser | null {
     sessions.delete(token);
     return null;
   }
+  // Sliding window: refresh expiry on access
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
   return session.user;
 }
 
@@ -130,17 +132,34 @@ export function deleteSession(token: string): void {
   sessions.delete(token);
 }
 
+// Periodic cleanup of expired sessions (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, session] of sessions) {
+    if (now > session.expiresAt) {
+      sessions.delete(token);
+    }
+  }
+}, 5 * 60 * 1000);
+
 /**
  * Extract session from request cookie.
  */
 export function getUserFromRequest(request: Request): SessionUser | null {
-  const cookie = request.headers.get('cookie');
-  if (!cookie) return null;
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) return null;
 
-  const match = cookie.match(/session=([^;]+)/);
-  if (!match) return null;
+  // Parse cookies manually to handle URL encoding
+  const cookies = cookieHeader.split(';').reduce((acc, part) => {
+    const [key, ...valueParts] = part.trim().split('=');
+    if (key) acc[key.trim()] = decodeURIComponent(valueParts.join('='));
+    return acc;
+  }, {} as Record<string, string>);
 
-  return getSession(match[1]);
+  const token = cookies['session'];
+  if (!token) return null;
+
+  return getSession(token);
 }
 
 /**

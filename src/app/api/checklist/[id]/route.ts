@@ -18,18 +18,18 @@ const RejectSchema = z.object({
   reason: z.string().min(1),
 });
 
-// Complete a checklist item (adviser action)
+// PUT /api/checklist/[id] — complete, approve, or reject
+// Permission is checked per-action: complete_items for complete, sign_off for approve/reject
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const { withAuth: authed } = await import('@/lib/auth');
+  const body = await request.json();
+  const { action } = body;
 
-  return authed('complete_items', async (user) => {
-    const body = await request.json();
-    const { action } = body;
-
-    if (action === 'complete') {
+  // Route to the correct permission based on action
+  if (action === 'complete') {
+    return withAuth('complete_items', async (user) => {
       const { evidenceUrl, notes } = CompleteSchema.parse(body);
       const result = await checklistService.completeItem(
         user.firmId,
@@ -38,9 +38,11 @@ export async function PUT(
         { url: evidenceUrl, notes }
       );
       return NextResponse.json({ data: result });
-    }
+    })(request);
+  }
 
-    if (action === 'approve') {
+  if (action === 'approve') {
+    return withAuth('sign_off', async (user) => {
       const { comment } = ApproveSchema.parse(body);
       const result = await checklistService.approveItem(
         user.firmId,
@@ -49,9 +51,11 @@ export async function PUT(
         comment
       );
       return NextResponse.json({ data: result });
-    }
+    })(request);
+  }
 
-    if (action === 'reject') {
+  if (action === 'reject') {
+    return withAuth('sign_off', async (user) => {
       const { reason } = RejectSchema.parse(body);
       const result = await checklistService.rejectItem(
         user.firmId,
@@ -60,8 +64,8 @@ export async function PUT(
         reason
       );
       return NextResponse.json({ data: result });
-    }
+    })(request);
+  }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  })(request);
+  return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 }

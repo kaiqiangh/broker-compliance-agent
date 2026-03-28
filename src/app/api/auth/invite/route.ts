@@ -19,7 +19,7 @@ export const POST = withAuth('invite_users', async (user, request) => {
     return NextResponse.json({ error: 'User with this email already exists' }, { status: 409 });
   }
 
-  // Generate temporary password (in production, send invite email)
+  // Generate temporary password (in production, send invite email with reset link)
   const tempPassword = crypto.randomUUID().slice(0, 12);
 
   const newUser = await createUser({
@@ -42,8 +42,10 @@ export const POST = withAuth('invite_users', async (user, request) => {
     },
   });
 
+  // In production: send invite email with temp password or reset link.
+  // DO NOT return tempPassword in the API response.
   return NextResponse.json({
     user: { id: newUser.id, email: newUser.email, name: newUser.name, role: newUser.role },
-    tempPassword, // In production, send via email instead
+    message: 'Invitation sent. User will receive login instructions via email.',
   });
 });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { registerFirm, createSession } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 const RegisterSchema = z.object({
@@ -13,6 +14,17 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const data = RegisterSchema.parse(body);
+
+    // Check if email already exists
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email.toLowerCase() },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: 'An account with this email already exists' },
+        { status: 409 }
+      );
+    }
 
     const { firmId, user } = await registerFirm({
       firmName: data.firmName,
