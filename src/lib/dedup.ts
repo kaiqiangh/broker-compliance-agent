@@ -27,13 +27,14 @@ export function computeDedupHash(components: {
   insurerName: string;
   inceptionDate: string; // YYYY-MM-DD
 }): string {
+  // Use \x00 (null byte) as separator — cannot appear in any of the component values
   const raw = [
     components.firmId,
     normalizePolicyNumber(components.policyNumber),
     components.policyType.trim().toLowerCase(),
     normalizeInsurerName(components.insurerName),
     components.inceptionDate,
-  ].join('||');
+  ].join('\x00');
   return createHash('sha256').update(raw).digest('hex');
 }
 

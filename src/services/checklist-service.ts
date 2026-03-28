@@ -22,7 +22,7 @@ export class ChecklistService {
     );
 
     if (!transition.success) {
-      throw new Error(transition.success === false ? transition.error : 'Unknown error');
+      throw new Error('error' in transition ? transition.error : 'Invalid transition');
     }
 
     const requiresSignOff = (ITEMS_REQUIRING_SIGN_OFF as readonly string[]).includes(item.itemType);
@@ -73,7 +73,7 @@ export class ChecklistService {
     );
 
     if (!transition.success) {
-      throw new Error(transition.success === false ? transition.error : 'Unknown error');
+      throw new Error('error' in transition ? transition.error : 'Invalid transition');
     }
 
     const updated = await prisma.checklistItem.update({
@@ -122,7 +122,7 @@ export class ChecklistService {
     );
 
     if (!transition.success) {
-      throw new Error(transition.success === false ? transition.error : 'Unknown error');
+      throw new Error('error' in transition ? transition.error : 'Invalid transition');
     }
 
     const updated = await prisma.checklistItem.update({

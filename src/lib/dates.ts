@@ -18,20 +18,11 @@ export function parseIrishDate(raw: string): Date | null {
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
     const [day, month, year] = trimmed.split('/').map(Number);
     // Validate ranges
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    // Disambiguate: if day > 12, it must be DD/MM
-    if (day > 12) {
-      const d = new Date(year, month - 1, day);
-      return isValid(d) ? d : null;
-    }
-    // If month > 12, it must be MM/DD (unlikely in Ireland)
-    if (month > 12) {
-      const d = new Date(year, day - 1, month);
-      return isValid(d) ? d : null;
-    }
-    // Ambiguous: default to DD/MM (Irish convention)
+    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) return null;
+    // Construct and verify (catches invalid combos like Feb 30)
     const d = new Date(year, month - 1, day);
-    return isValid(d) ? d : null;
+    if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+    return d;
   }
 
   // Try DD-MMM-YYYY (e.g., 15-Mar-2024)
@@ -94,7 +85,12 @@ export function calculateRenewalStatus(
 ): 'pending' | 'in_progress' | 'at_risk' | 'compliant' | 'overdue' {
   const daysUntil = daysBetween(new Date(), dueDate);
 
-  if (completedCount >= totalCount && totalCount > 0) return 'compliant';
+  // Empty checklist is not compliant — it's pending
+  if (totalCount === 0) {
+    return daysUntil < 0 ? 'overdue' : 'pending';
+  }
+
+  if (completedCount >= totalCount) return 'compliant';
   if (daysUntil < 0) return 'overdue';
   if (daysUntil <= 7 && completedCount < totalCount) return 'at_risk';
   if (completedCount > 0) return 'in_progress';

@@ -134,7 +134,7 @@ function mapRowToPolicy(row: Record<string, string>, format: string): ParsedPoli
         expiryDate: formatDate(row['ExpiryDate'], 'DD/MM/YYYY'),
         premium: parsePremium(row['Premium'] || '0'),
         commission: parseCommission(row['Commission'] || ''),
-        ncb: row['NCB'] ? parseInt(row['NCB'], 10) : undefined,
+        ncb: row['NCB'] !== undefined && row['NCB'] !== '' ? parseInt(row['NCB'], 10) || 0 : undefined,
         vehicleReg: row['VehicleReg'] || undefined,
         coverType: row['CoverType'] || undefined,
       };
@@ -191,10 +191,11 @@ function mapRowToPolicy(row: Record<string, string>, format: string): ParsedPoli
   }
 }
 
-function formatDate(raw: string, expectedFormat: string): string {
-  if (!raw) return '';
+function formatDate(raw: string, _expectedFormat: string): string {
+  if (!raw || raw.trim() === '') return '';
   const parsed = parseIrishDate(raw);
-  return parsed ? formatISODate(parsed) : raw;
+  if (!parsed) return ''; // return empty on parse failure, not raw string
+  return formatISODate(parsed);
 }
 
 function normalizePolicyType(raw: string): string {

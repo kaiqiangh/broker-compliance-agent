@@ -60,7 +60,7 @@ export class ImportService {
 
         if (existing) {
           const hasChanges =
-            existing.premium.toNumber() !== policy.premium ||
+            Number(existing.premium) !== policy.premium ||
             existing.expiryDate.toISOString().slice(0, 10) !== policy.expiryDate;
 
           if (hasChanges) {
