@@ -1,0 +1,37 @@
+import { NextResponse } from 'next/server';
+import { withAuth } from '@/lib/auth';
+import { AuditService } from '@/services/audit-service';
+
+const auditService = new AuditService();
+
+export const GET = withAuth('export_audit', async (user, request) => {
+  const url = new URL(request.url);
+
+  // CSV export mode
+  if (url.searchParams.get('format') === 'csv') {
+    const csv = await auditService.exportCSV(user.firmId, {
+      startDate: url.searchParams.get('from') ? new Date(url.searchParams.get('from')!) : undefined,
+      endDate: url.searchParams.get('to') ? new Date(url.searchParams.get('to')!) : undefined,
+    });
+
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': `attachment; filename="audit-trail-${new Date().toISOString().slice(0, 10)}.csv"`,
+      },
+    });
+  }
+
+  // JSON query mode
+  const filters = {
+    startDate: url.searchParams.get('from') ? new Date(url.searchParams.get('from')!) : undefined,
+    endDate: url.searchParams.get('to') ? new Date(url.searchParams.get('to')!) : undefined,
+    action: url.searchParams.get('action') || undefined,
+    entityType: url.searchParams.get('entity') || undefined,
+    limit: parseInt(url.searchParams.get('limit') || '50', 10),
+    offset: parseInt(url.searchParams.get('offset') || '0', 10),
+  };
+
+  const result = await auditService.query(user.firmId, filters);
+  return NextResponse.json({ data: result.events, meta: { total: result.total } });
+});

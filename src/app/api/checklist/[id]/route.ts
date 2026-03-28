@@ -24,8 +24,18 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const body = await request.json();
+  let body: { action?: string; [key: string]: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
   const { action } = body;
+
+  if (!action || typeof action !== 'string') {
+    return NextResponse.json({ error: 'Missing or invalid action field' }, { status: 400 });
+  }
 
   // Route to the correct permission based on action
   if (action === 'complete') {

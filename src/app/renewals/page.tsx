@@ -1,14 +1,50 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+interface Renewal {
+  id: string;
+  clientName: string;
+  policyNumber: string;
+  policyType: string;
+  insurerName: string;
+  dueDate: string;
+  premium: number;
+  newPremium: number | null;
+  status: string;
+  checklistProgress: string;
+  completionRate: number;
+  daysUntilDue: number;
+}
+
 export default function RenewalsPage() {
-  const renewals = [
-    { client: 'Máire Ní Chonaill', policy: 'POL-2024-004', type: 'Commercial', insurer: 'FBD', dueDate: '23/12/2024', premium: '€4,200.00', status: 'overdue', progress: '2/8' },
-    { client: 'Patrick Kelly', policy: 'POL-2024-003', type: 'Motor', insurer: 'Allianz', dueDate: '12/01/2025', premium: '€1,580.00', status: 'at_risk', progress: '4/8' },
-    { client: 'Conor O\'Neill', policy: 'POL-2024-006', type: 'Motor', insurer: 'Aviva', dueDate: '22/01/2025', premium: '€1,100.00', status: 'in_progress', progress: '5/8' },
-    { client: 'Seán Ó Briain', policy: 'POL-2024-001', type: 'Motor', insurer: 'Aviva', dueDate: '11/02/2025', premium: '€1,245.00', status: 'pending', progress: '0/8' },
-    { client: 'Niamh Fitzgerald', policy: 'POL-2024-007', type: 'Home', insurer: 'Allianz', dueDate: '11/02/2025', premium: '€750.00', status: 'pending', progress: '0/8' },
-    { client: 'Áine Murphy', policy: 'POL-2024-002', type: 'Home', insurer: 'Zurich', dueDate: '02/03/2025', premium: '€890.00', status: 'compliant', progress: '8/8' },
-    { client: 'Siobhán Doyle', policy: 'POL-2024-008', type: 'Motor', insurer: 'Zurich', dueDate: '21/03/2025', premium: '€1,350.00', status: 'in_progress', progress: '3/8' },
-    { client: 'Cormac Brennan', policy: 'POL-2024-005', type: 'Motor', insurer: 'Liberty', dueDate: '12/04/2025', premium: '€980.00', status: 'pending', progress: '0/8' },
-  ];
+  const [renewals, setRenewals] = useState<Renewal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+
+  useEffect(() => {
+    async function loadRenewals() {
+      try {
+        const params = new URLSearchParams();
+        if (statusFilter) params.set('status', statusFilter);
+        if (typeFilter) params.set('type', typeFilter);
+
+        const res = await fetch(`/api/renewals?${params}`);
+        if (!res.ok) {
+          if (res.status === 401) { window.location.href = '/login'; return; }
+          throw new Error('Failed to load renewals');
+        }
+        const data = await res.json();
+        setRenewals(data.data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadRenewals();
+  }, [statusFilter, typeFilter]);
 
   const statusColors: Record<string, { bg: string; text: string; label: string }> = {
     overdue: { bg: 'bg-red-100', text: 'text-red-800', label: 'Overdue' },
@@ -18,84 +54,102 @@ export default function RenewalsPage() {
     pending: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Pending' },
   };
 
+  const formatPremium = (value: number) =>
+    `€${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Renewals</h1>
-          <p className="text-gray-500 mt-1">Manage CPC renewal compliance for all upcoming policies</p>
+          <p className="text-gray-500 mt-1">Manage CPC renewal compliance</p>
         </div>
         <div className="flex gap-3">
-          <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-            <option>All statuses</option>
-            <option>Overdue</option>
-            <option>At Risk</option>
-            <option>In Progress</option>
-            <option>Compliant</option>
-            <option>Pending</option>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">All statuses</option>
+            <option value="overdue">Overdue</option>
+            <option value="at_risk">At Risk</option>
+            <option value="in_progress">In Progress</option>
+            <option value="compliant">Compliant</option>
+            <option value="pending">Pending</option>
           </select>
-          <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-            <option>All types</option>
-            <option>Motor</option>
-            <option>Home</option>
-            <option>Commercial</option>
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">All types</option>
+            <option value="motor">Motor</option>
+            <option value="home">Home</option>
+            <option value="commercial">Commercial</option>
           </select>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="min-w-full">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Client</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Policy</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Type</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Insurer</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Due Date</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Premium</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Checklist</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {renewals.map((r, i) => {
-              const s = statusColors[r.status];
-              const [completed, total] = r.progress.split('/').map(Number);
-              const pct = Math.round((completed / total) * 100);
-              return (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium">{r.client}</td>
-                  <td className="py-3 px-4 font-mono text-xs text-gray-600">{r.policy}</td>
-                  <td className="py-3 px-4 text-sm">{r.type}</td>
-                  <td className="py-3 px-4 text-sm">{r.insurer}</td>
-                  <td className="py-3 px-4 text-sm">{r.dueDate}</td>
-                  <td className="py-3 px-4 text-sm font-medium">{r.premium}</td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1.5 bg-gray-200 rounded-full">
-                        <div
-                          className={`h-1.5 rounded-full ${pct === 100 ? 'bg-green-500' : pct > 50 ? 'bg-blue-500' : 'bg-gray-400'}`}
-                          style={{ width: `${pct}%` }}
-                        />
+      {loading ? (
+        <div className="text-center text-gray-500 py-12">Loading renewals...</div>
+      ) : renewals.length === 0 ? (
+        <div className="text-center text-gray-500 py-12">
+          No renewals found. Import policy data to get started.
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Client</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Policy</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Type</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Insurer</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Due Date</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Premium</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Checklist</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {renewals.map((r) => {
+                const s = statusColors[r.status] || statusColors.pending;
+                return (
+                  <tr key={r.id} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 font-medium">{r.clientName}</td>
+                    <td className="py-3 px-4 font-mono text-xs text-gray-600">{r.policyNumber}</td>
+                    <td className="py-3 px-4 text-sm">{r.policyType}</td>
+                    <td className="py-3 px-4 text-sm">{r.insurerName}</td>
+                    <td className="py-3 px-4 text-sm">
+                      {new Date(r.dueDate).toLocaleDateString('en-IE')}
+                    </td>
+                    <td className="py-3 px-4 text-sm font-medium">{formatPremium(r.premium)}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 h-1.5 bg-gray-200 rounded-full">
+                          <div
+                            className={`h-1.5 rounded-full ${
+                              r.completionRate === 100 ? 'bg-green-500' :
+                              r.completionRate > 50 ? 'bg-blue-500' : 'bg-gray-400'
+                            }`}
+                            style={{ width: `${r.completionRate}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500">{r.checklistProgress}</span>
                       </div>
-                      <span className="text-xs text-gray-500">{r.progress}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>
-                      {s.label}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <button className="text-blue-600 text-sm hover:underline">View</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>
+                        {s.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

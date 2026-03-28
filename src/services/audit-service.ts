@@ -78,7 +78,14 @@ export class AuditService {
       JSON.stringify(e.metadata),
     ]);
 
-    const escapeCsvField = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    // CSV injection prevention: prefix formula-triggering characters with single quote
+    const sanitizeCell = (v: string) => {
+      const trimmed = v.trim();
+      if (/^[=+\-@\t\r]/.test(trimmed)) return "'" + v;
+      return v;
+    };
+
+    const escapeCsvField = (v: string) => `"${sanitizeCell(v).replace(/"/g, '""')}"`;
     const csv = [
       headers.map(escapeCsvField).join(','),
       ...rows.map(r => r.map(escapeCsvField).join(',')),
