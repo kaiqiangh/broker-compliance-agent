@@ -16,11 +16,21 @@ interface UserProfile {
   name: string;
   role: string;
   lastLoginAt: string | null;
+  firm: FirmData;
+}
+
+interface TeamMember {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  lastLoginAt: string | null;
 }
 
 export default function SettingsPage() {
-  const [firm, setFirm] = useState<FirmData | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Password change state
@@ -31,40 +41,28 @@ export default function SettingsPage() {
   const [pwError, setPwError] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
 
-  // Firm edit state
-  const [firmName, setFirmName] = useState('');
-  const [cbiReg, setCbiReg] = useState('');
-  const [firmMessage, setFirmMessage] = useState('');
-  const [firmError, setFirmError] = useState('');
-  const [firmLoading, setFirmLoading] = useState(false);
-
   useEffect(() => {
     async function load() {
       try {
-        const [dashboardRes] = await Promise.all([
-          fetch('/api/dashboard'),
+        const [meRes, usersRes] = await Promise.all([
+          fetch('/api/auth/me'),
+          fetch('/api/users'),
         ]);
-        if (dashboardRes.ok) {
-          const data = await dashboardRes.json();
-          // Dashboard doesn't return firm data, so we load from a different source
-        }
 
-        // Get current user from session (check who we are)
-        const clientsRes = await fetch('/api/clients?limit=1');
-        if (clientsRes.status === 401) {
+        if (meRes.status === 401) {
           window.location.href = '/login';
           return;
         }
 
-        // Load firm data from health endpoint or derive from session
-        // For now, set basic profile from cookies
-        setProfile({
-          id: 'current',
-          email: '',
-          name: '',
-          role: '',
-          lastLoginAt: null,
-        });
+        if (meRes.ok) {
+          const data = await meRes.json();
+          setProfile(data.data);
+        }
+
+        if (usersRes.ok) {
+          const data = await usersRes.json();
+          setTeam(data.data);
+        }
       } catch (err) {
         console.error('Failed to load settings:', err);
       } finally {
@@ -104,12 +102,19 @@ export default function SettingsPage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err) {
+    } catch {
       setPwError('Network error');
     } finally {
       setPwLoading(false);
     }
   }
+
+  const roleLabels: Record<string, string> = {
+    firm_admin: 'Admin',
+    compliance_officer: 'Compliance Officer',
+    adviser: 'Adviser',
+    read_only: 'Read Only',
+  };
 
   if (loading) {
     return <div className="p-8 text-gray-500">Loading settings...</div>;
@@ -121,6 +126,37 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500 mt-1">Manage your account and firm settings</p>
       </div>
+
+      {/* Profile */}
+      {profile && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4">Your Profile</h2>
+          <div className="grid grid-cols-2 gap-4 max-w-md">
+            <div>
+              <label className="block text-sm font-medium text-gray-500">Name</label>
+              <p className="text-sm text-gray-900 mt-1">{profile.name}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">Email</label>
+              <p className="text-sm text-gray-900 mt-1">{profile.email}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">Role</label>
+              <p className="text-sm text-gray-900 mt-1">
+                {roleLabels[profile.role] || profile.role}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">Last Login</label>
+              <p className="text-sm text-gray-900 mt-1">
+                {profile.lastLoginAt
+                  ? new Date(profile.lastLoginAt).toLocaleString('en-IE')
+                  : '—'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
@@ -170,23 +206,69 @@ export default function SettingsPage() {
         </form>
       </div>
 
-      {/* Firm Info (read-only for non-admin) */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Firm Information</h2>
-        <div className="space-y-3 max-w-md">
-          <div>
-            <label className="block text-sm font-medium text-gray-500">Firm Name</label>
-            <p className="text-sm text-gray-900 mt-1">Contact your administrator to update firm details</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500">CBI Registration</label>
-            <p className="text-sm text-gray-900 mt-1">—</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500">Subscription</label>
-            <p className="text-sm text-gray-900 mt-1">Starter</p>
+      {/* Firm Info */}
+      {profile?.firm && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4">Firm Information</h2>
+          <div className="grid grid-cols-2 gap-4 max-w-md">
+            <div>
+              <label className="block text-sm font-medium text-gray-500">Firm Name</label>
+              <p className="text-sm text-gray-900 mt-1">{profile.firm.name}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">CBI Registration</label>
+              <p className="text-sm text-gray-900 mt-1">{profile.firm.cbiRegistration || '—'}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">Subscription</label>
+              <p className="text-sm text-gray-900 mt-1 capitalize">
+                {profile.firm.subscriptionTier}
+                <span className="ml-2 text-xs text-gray-400">({profile.firm.subscriptionStatus})</span>
+              </p>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Team Members */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">Team Members</h2>
+        {team.length === 0 ? (
+          <p className="text-sm text-gray-500">No team members found.</p>
+        ) : (
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-2 text-sm font-medium text-gray-500">Name</th>
+                <th className="text-left py-2 text-sm font-medium text-gray-500">Email</th>
+                <th className="text-left py-2 text-sm font-medium text-gray-500">Role</th>
+                <th className="text-left py-2 text-sm font-medium text-gray-500">Status</th>
+                <th className="text-left py-2 text-sm font-medium text-gray-500">Last Login</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {team.map(member => (
+                <tr key={member.id}>
+                  <td className="py-2 text-sm">{member.name}</td>
+                  <td className="py-2 text-sm text-gray-600">{member.email}</td>
+                  <td className="py-2 text-sm">{roleLabels[member.role] || member.role}</td>
+                  <td className="py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      member.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {member.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="py-2 text-sm text-gray-500">
+                    {member.lastLoginAt
+                      ? new Date(member.lastLoginAt).toLocaleDateString('en-IE')
+                      : 'Never'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* GDPR Section */}
