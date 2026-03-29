@@ -103,7 +103,8 @@ describe('calculateRenewalTimeline', () => {
     const timeline = calculateRenewalTimeline(expiry, 'cp158');
 
     expect('preRenewalNotice' in timeline).toBe(true);
-    expect(timeline.preRenewalNotice!.getDate()).toBe(3); // Feb 3
+    const cp158Timeline = timeline as { preRenewalNotice: Date; renewalNotice: Date; urgentReminder: Date; finalReminder: Date };
+    expect(cp158Timeline.preRenewalNotice.getDate()).toBe(3); // Feb 3
   });
 });
 

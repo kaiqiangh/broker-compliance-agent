@@ -1,6 +1,6 @@
-import { prisma } from './prisma';
-import { parseCSV } from './csv-parser';
-import { computeDedupHash, normalizePolicyNumber } from './dedup';
+import { prisma } from '../lib/prisma';
+import { parseCSV } from '../lib/csv-parser';
+import { computeDedupHash, normalizePolicyNumber } from '../lib/dedup';
 
 export interface ImportResult {
   importId: string;
@@ -70,7 +70,7 @@ export class ImportService {
                 premium: policy.premium,
                 expiryDate: new Date(policy.expiryDate),
                 policyStatus: policy.status || 'active',
-                lastImportId: importRecord.id,
+                importId: importRecord.id,
               },
             });
             importedCount++;
@@ -93,7 +93,7 @@ export class ImportService {
               dedupHash,
               dedupConfidence: 0.95,
               premium: policy.premium,
-              lastImportId: importRecord.id,
+              importId: importRecord.id,
             },
           });
           importedCount++;

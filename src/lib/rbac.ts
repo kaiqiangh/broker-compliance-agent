@@ -1,4 +1,4 @@
-import type { Role } from './rbac';
+export type Role = 'firm_admin' | 'compliance_officer' | 'adviser' | 'read_only';
 
 export type Permission =
   | 'import'
