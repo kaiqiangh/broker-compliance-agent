@@ -224,7 +224,6 @@ export default function ChecklistPage() {
                 });
                 if (!res.ok) throw new Error('Generation failed');
                 const data = await res.json();
-                // Open generated HTML in new window
                 const win = window.open('', '_blank');
                 if (win) {
                   win.document.write(data.data.html);
@@ -237,6 +236,29 @@ export default function ChecklistPage() {
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
           >
             📄 Renewal Notification Letter
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/documents', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ renewalId, documentType: 'suitability_assessment' }),
+                });
+                if (!res.ok) throw new Error('Generation failed');
+                const data = await res.json();
+                const win = window.open('', '_blank');
+                if (win) {
+                  win.document.write(data.data.html);
+                  win.document.close();
+                }
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Generation failed');
+              }
+            }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+          >
+            📋 Suitability Assessment
           </button>
           <button
             onClick={() => window.print()}

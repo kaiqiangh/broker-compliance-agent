@@ -69,14 +69,18 @@ export class AuditService {
     });
 
     const headers = ['Timestamp', 'Actor', 'Action', 'Entity Type', 'Entity ID', 'Metadata'];
-    const rows = events.map(e => [
-      e.timestamp.toISOString(),
-      e.actorId ?? '',
-      e.action,
-      e.entityType,
-      e.entityId ?? '',
-      JSON.stringify(e.metadata),
-    ]);
+    const rows = events.map(e => {
+      // Redact PII fields from metadata before export
+      const safeMetadata = this.redactPII(e.metadata as Record<string, unknown>);
+      return [
+        e.timestamp.toISOString(),
+        e.actorId ?? '',
+        e.action,
+        e.entityType,
+        e.entityId ?? '',
+        JSON.stringify(safeMetadata),
+      ];
+    });
 
     // CSV injection prevention: prefix formula-triggering characters with single quote
     const sanitizeCell = (v: string) => {
@@ -92,5 +96,23 @@ export class AuditService {
     ].join('\n');
 
     return csv;
+  }
+
+  /**
+   * Redact PII fields from audit event metadata for safe CSV export.
+   * Fields that may contain PII: clientName, email, policyNumber, recipients.
+   */
+  private redactPII(metadata: Record<string, unknown>): Record<string, unknown> {
+    const PII_FIELDS = ['clientName', 'email', 'policyNumber', 'recipients', 'clientAddress', 'phone'];
+    const result = { ...metadata };
+    for (const field of PII_FIELDS) {
+      if (field in result && typeof result[field] === 'string') {
+        result[field] = '[REDACTED]';
+      }
+      if (field in result && Array.isArray(result[field])) {
+        result[field] = ['[REDACTED]'];
+      }
+    }
+    return result;
   }
 }

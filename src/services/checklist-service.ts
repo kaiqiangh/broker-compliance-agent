@@ -178,7 +178,7 @@ export class ChecklistService {
     if (!renewal) return;
 
     const completedCount = renewal.checklistItems.filter(
-      i => i.status === 'approved'
+      i => i.status === 'approved' || i.status === 'completed'
     ).length;
     const totalCount = renewal.checklistItems.length;
 

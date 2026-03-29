@@ -53,7 +53,7 @@ export const POST = withAuth('complete_items', async (user, request) => {
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const fileName = `${user.firmId}/${checklistItemId}/${fileHash}-${safeName}`;
-  const fileUrl = `uploads/${fileName}`;
+  const fileUrl = `/api/files/${fileName}`; // Authenticated file serving route
 
   // Write to local filesystem (production: replace with S3/R2)
   const fs = await import('fs/promises');
