@@ -244,6 +244,84 @@ export class DocumentService {
   }
 
   /**
+   * Generate a CPC Commission Disclosure document (HTML).
+   */
+  generateCommissionDisclosure(data: {
+    clientName: string;
+    policyNumber: string;
+    policyType: string;
+    insurerName: string;
+    premium: number;
+    commissionRate: number;
+    commissionAmount: number;
+    firmName: string;
+    adviserName: string;
+  }): string {
+    const today = new Date().toLocaleDateString('en-IE', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    });
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: 'Times New Roman', serif; max-width: 700px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1a1a1a; }
+    h1 { font-size: 20px; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px; }
+    .field { margin: 12px 0; }
+    .label { font-weight: bold; display: inline-block; min-width: 220px; }
+    .value { display: inline-block; }
+    .section { border: 1px solid #ccc; padding: 16px; margin: 16px 0; }
+    .highlight { background: #e8f4fd; border: 1px solid #2196F3; padding: 12px; margin: 16px 0; }
+    .signature { margin-top: 40px; }
+    .sign-line { margin-top: 40px; border-bottom: 1px solid #333; width: 300px; display: inline-block; }
+    .footer { margin-top: 40px; font-size: 11px; color: #888; border-top: 1px solid #ddd; padding-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Commission Disclosure Statement</h1>
+  <p style="font-size: 13px; color: #666;">Consumer Protection Code 2012 — Section 17.1</p>
+
+  <p style="margin-top: 20px;">Date: ${escapeHtml(today)}</p>
+
+  <h2>Policy Details</h2>
+  <div class="section">
+    <div class="field"><span class="label">Client Name:</span> <span class="value">${escapeHtml(data.clientName)}</span></div>
+    <div class="field"><span class="label">Policy Number:</span> <span class="value">${escapeHtml(data.policyNumber)}</span></div>
+    <div class="field"><span class="label">Policy Type:</span> <span class="value">${escapeHtml(data.policyType)}</span></div>
+    <div class="field"><span class="label">Insurer:</span> <span class="value">${escapeHtml(data.insurerName)}</span></div>
+  </div>
+
+  <h2>Commission Details</h2>
+  <div class="highlight">
+    <div class="field"><span class="label">Premium:</span> <span class="value">€${data.premium.toFixed(2)}</span></div>
+    <div class="field"><span class="label">Commission Rate:</span> <span class="value">${data.commissionRate.toFixed(2)}%</span></div>
+    <div class="field"><span class="label">Commission Amount:</span> <span class="value">€${data.commissionAmount.toFixed(2)}</span></div>
+  </div>
+
+  <h2>Disclosure</h2>
+  <p>In accordance with the Consumer Protection Code 2012, we wish to disclose that ${escapeHtml(data.firmName)} receives commission from ${escapeHtml(data.insurerName)} in respect of the above policy.</p>
+  <p>The commission is calculated as ${data.commissionRate.toFixed(2)}% of the premium (€${data.premium.toFixed(2)}), which amounts to €${data.commissionAmount.toFixed(2)}.</p>
+  <p>This commission is paid by the insurer and is included in the premium quoted to you. No additional fee is charged to you for this service.</p>
+  <p>Where we hold a tied agency or multi-agency arrangement with the insurer, this is disclosed separately. You are entitled to request further details regarding the commission structure.</p>
+
+  <div class="signature">
+    <p>Yours sincerely,</p>
+    <br><br>
+    <p>Signature: <span class="sign-line">&nbsp;</span></p>
+    <p><strong>${escapeHtml(data.adviserName)}</strong><br>${escapeHtml(data.firmName)}</p>
+  </div>
+
+  <div class="footer">
+    ${escapeHtml(data.firmName)} is regulated by the Central Bank of Ireland.<br>
+    This disclosure is made in accordance with the Consumer Protection Code 2012, Section 17.1 (conflicts of interest — commission).
+  </div>
+</body>
+</html>`;
+  }
+
+  /**
    * Generate and store a document.
    */
   async generate(
@@ -300,6 +378,22 @@ export class DocumentService {
         firmName: renewal.firm.name,
         adviserName: renewal.policy.adviser?.name || 'Adviser',
         expiryDate: renewal.policy.expiryDate.toISOString(),
+      });
+    } else if (documentType === 'commission_disclosure') {
+      const premium = Number(renewal.newPremium || renewal.policy.premium);
+      const commissionRate = renewal.policy.commissionRate ? Number(renewal.policy.commissionRate) : 12.5;
+      const commissionAmount = (premium * commissionRate) / 100;
+
+      html = this.generateCommissionDisclosure({
+        clientName: renewal.policy.client.name,
+        policyNumber: renewal.policy.policyNumber,
+        policyType: renewal.policy.policyType,
+        insurerName: renewal.policy.insurerName,
+        premium,
+        commissionRate,
+        commissionAmount,
+        firmName: renewal.firm.name,
+        adviserName: renewal.policy.adviser?.name || 'Adviser',
       });
     } else {
       throw new Error(`Unknown document type: ${documentType}`);

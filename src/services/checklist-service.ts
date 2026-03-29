@@ -150,11 +150,14 @@ export class ChecklistService {
   }
 
   async getRenewalChecklist(firmId: string, renewalId: string) {
-    const items = await prisma.checklistItem.findMany({
-      where: { firmId, renewalId },
-      orderBy: { createdAt: 'asc' },
+    const renewal = await prisma.renewal.findFirst({
+      where: { id: renewalId, firmId },
+      include: { checklistItems: { orderBy: { createdAt: 'asc' as const } }, policy: { include: { client: true } } },
     });
 
+    if (!renewal) throw new Error('Renewal not found');
+
+    const items = renewal.checklistItems;
     const signOffTypes = ITEMS_REQUIRING_SIGN_OFF as readonly string[];
 
     const completedCount = items.filter(
@@ -166,6 +169,9 @@ export class ChecklistService {
       completedCount,
       totalCount: items.length,
       completionRate: items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0,
+      dueDate: renewal.dueDate,
+      clientName: renewal.policy.client.name,
+      policyNumber: renewal.policy.policyNumber,
     };
   }
 

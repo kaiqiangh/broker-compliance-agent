@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { parseCSV } from '../lib/csv-parser';
-import { computeDedupHash, normalizePolicyNumber } from '../lib/dedup';
+import { computeDedupHash, normalizePolicyNumber, fuzzyMatchPolicy, type FuzzyMatchResult } from '../lib/dedup';
 
 export interface ImportResult {
   importId: string;
@@ -8,6 +8,7 @@ export interface ImportResult {
   importedRows: number;
   skippedRows: number;
   errorRows: number;
+  needsReviewRows: number;
   format: string;
   confidence: number;
   errors: Array<{ row: number; field: string; error: string }>;
@@ -42,6 +43,7 @@ export class ImportService {
 
     let importedCount = 0;
     let skippedCount = 0;
+    let needsReviewCount = 0;
 
     // Pre-fetch existing policies for this firm to avoid N+1 queries
     const dedupHashes = parsed.policies.map(p => computeDedupHash({
@@ -54,18 +56,16 @@ export class ImportService {
     const normalizedNumbers = parsed.policies.map(p => normalizePolicyNumber(p.policyNumber));
 
     const existingPolicies = await prisma.policy.findMany({
-      where: {
-        firmId,
-        OR: [
-          { dedupHash: { in: dedupHashes } },
-          { policyNumberNormalized: { in: normalizedNumbers } },
-        ],
-      },
+      where: { firmId },
     });
 
     // Build lookup maps
     const byHash = new Map(existingPolicies.map(p => [p.dedupHash, p]));
-    const byNormalized = new Map(existingPolicies.map(p => [p.policyNumberNormalized, p]));
+    const byNormalized = new Map(
+      existingPolicies
+        .filter(p => p.policyNumberNormalized)
+        .map(p => [p.policyNumberNormalized!, p])
+    );
 
     // Pre-fetch existing clients
     const clientNames = [...new Set(parsed.policies.map(p => p.clientName))];
@@ -127,6 +127,35 @@ export class ImportService {
             },
           });
           importedCount++;
+          continue;
+        }
+
+        // Tier 3: fuzzy match — same insurer + same type + similar policy number
+        let fuzzyHit: { policy: typeof existingPolicies[number]; result: FuzzyMatchResult } | null = null;
+        for (const existingPolicy of existingPolicies) {
+          if (!existingPolicy.policyNumberNormalized) continue;
+          if (existingPolicy.policyType !== policy.policyType) continue;
+          if (existingPolicy.insurerName.toLowerCase() !== policy.insurerName.toLowerCase()) continue;
+
+          const fm = fuzzyMatchPolicy(normalizedNumber, existingPolicy.policyNumberNormalized);
+          if (fm.matched) {
+            if (!fuzzyHit || fm.confidence > fuzzyHit.result.confidence) {
+              fuzzyHit = { policy: existingPolicy, result: fm };
+            }
+          }
+        }
+
+        if (fuzzyHit) {
+          // Fuzzy match found — mark for review, don't auto-update
+          await prisma.policy.update({
+            where: { id: fuzzyHit.policy.id },
+            data: {
+              dedupConfidence: fuzzyHit.result.confidence,
+              importId: importRecord.id,
+              policyStatus: 'needs_review',
+            },
+          });
+          needsReviewCount++;
           continue;
         }
 
@@ -197,6 +226,7 @@ export class ImportService {
           totalRows: parsed.policies.length,
           imported: importedCount,
           skipped: skippedCount,
+          needsReview: needsReviewCount,
           errors: parsed.errors.length,
         },
       },
@@ -208,6 +238,7 @@ export class ImportService {
       importedRows: importedCount,
       skippedRows: skippedCount,
       errorRows: parsed.errors.length,
+      needsReviewRows: needsReviewCount,
       format: parsed.format,
       confidence: parsed.confidence,
       errors: parsed.errors,

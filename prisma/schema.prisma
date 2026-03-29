@@ -16,6 +16,7 @@ model Firm {
   subscriptionTier  String   @default("starter") @map("subscription_tier") @db.VarChar(50)
   subscriptionStatus String  @default("active") @map("subscription_status") @db.VarChar(50)
   gdprStatus        String   @default("active") @map("gdpr_status") @db.VarChar(50)
+  importMapping     Json?    @map("import_mapping")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 

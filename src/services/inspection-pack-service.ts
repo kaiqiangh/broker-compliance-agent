@@ -28,6 +28,13 @@ interface PackResult {
   fileCount: number;
 }
 
+interface PackFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  policyType?: string;
+  adviserId?: string;
+}
+
 export class InspectionPackService {
   /**
    * Generate a CBI inspection evidence pack as a ZIP file.
@@ -267,5 +274,156 @@ export class InspectionPackService {
 
       archive.finalize();
     });
+  }
+
+  /**
+   * Generate inspection pack for multiple renewals with optional filters.
+   */
+  async generateFilteredPack(
+    firmId: string,
+    filters: PackFilters,
+    generatedBy: string
+  ): Promise<PackResult> {
+    // Build where clause from filters
+    const where: any = { firmId };
+
+    if (filters.dateFrom || filters.dateTo) {
+      where.dueDate = {};
+      if (filters.dateFrom) where.dueDate.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.dueDate.lte = new Date(filters.dateTo);
+    }
+
+    if (filters.policyType) {
+      where.policy = { policyType: filters.policyType };
+    }
+
+    if (filters.adviserId) {
+      where.policy = { ...where.policy, adviserId: filters.adviserId };
+    }
+
+    // Find matching renewals
+    const renewals = await prisma.renewal.findMany({
+      where,
+      include: {
+        policy: {
+          include: { client: true, firm: true, adviser: true },
+        },
+        firm: true,
+        checklistItems: { orderBy: { createdAt: 'asc' } },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    if (renewals.length === 0) {
+      throw new Error('No renewals match the specified filters');
+    }
+
+    // Collect all files for the ZIP
+    const files: Array<{ name: string; content: Buffer }> = [];
+    const allAuditEvents: any[] = [];
+
+    // Build filter summary
+    const filterLines: string[] = [`Firm: ${renewals[0].firm.name}`];
+    if (filters.dateFrom) filterLines.push(`Date From: ${filters.dateFrom}`);
+    if (filters.dateTo) filterLines.push(`Date To: ${filters.dateTo}`);
+    if (filters.policyType) filterLines.push(`Policy Type: ${filters.policyType}`);
+    if (filters.adviserId) filterLines.push(`Adviser ID: ${filters.adviserId}`);
+    filterLines.push(`Renewals Included: ${renewals.length}`);
+
+    const summaryHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      body { font-family: 'Times New Roman', serif; max-width: 700px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+      h1 { border-bottom: 3px solid #1a1a1a; padding-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+      td, th { padding: 8px 12px; border: 1px solid #ccc; text-align: left; }
+      th { background: #f5f5f5; }
+    </style></head><body>
+      <h1>CBI Inspection Pack — Filtered</h1>
+      <p><strong>Filters Applied:</strong></p>
+      <ul>${filterLines.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+      <table>
+        <tr><th>#</th><th>Client</th><th>Policy</th><th>Type</th><th>Due Date</th><th>Status</th></tr>
+        ${renewals.map((r, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${escapeHtml(r.policy.client.name)}</td>
+          <td>${escapeHtml(r.policy.policyNumber)}</td>
+          <td>${escapeHtml(r.policy.policyType)}</td>
+          <td>${new Date(r.dueDate).toLocaleDateString('en-IE')}</td>
+          <td>${escapeHtml(r.status)}</td>
+        </tr>`).join('')}
+      </table>
+      <p>Generated: ${new Date().toISOString()}</p>
+    </body></html>`;
+
+    files.push({ name: '00_Pack_Summary.html', content: Buffer.from(summaryHtml) });
+
+    // Generate documents per renewal
+    let fileIndex = 0;
+    for (const renewal of renewals) {
+      const prefix = `${(++fileIndex).toString().padStart(2, '0')}_${renewal.policy.policyNumber.replace(/[^a-zA-Z0-9-]/g, '')}`;
+
+      // Renewal notification letter
+      try {
+        const letter = await documentService.generate(
+          firmId, renewal.id, 'renewal_notification', generatedBy
+        );
+        const letterPdf = await htmlToPdf(letter.html);
+        files.push({ name: `${prefix}_Renewal_Letter.pdf`, content: letterPdf });
+      } catch { /* skip if generation fails */ }
+
+      // Suitability assessment
+      try {
+        const suitability = await documentService.generate(
+          firmId, renewal.id, 'suitability_assessment', generatedBy
+        );
+        const suitabilityPdf = await htmlToPdf(suitability.html);
+        files.push({ name: `${prefix}_Suitability_Assessment.pdf`, content: suitabilityPdf });
+      } catch { /* skip */ }
+
+      // Checklist summary per renewal
+      const checklistCsv = this.buildChecklistSummary(renewal);
+      files.push({ name: `${prefix}_Checklist.csv`, content: Buffer.from(checklistCsv, 'utf-8') });
+
+      // Collect audit events
+      const events = await prisma.auditEvent.findMany({
+        where: {
+          firmId,
+          OR: [
+            { entityId: renewal.id, entityType: 'renewal' },
+            { entityId: { in: renewal.checklistItems.map(i => i.id) }, entityType: 'checklist_item' },
+          ],
+        },
+        orderBy: { timestamp: 'asc' },
+      });
+      allAuditEvents.push(...events);
+    }
+
+    // Combined audit trail
+    allAuditEvents.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const auditCsv = this.buildAuditCsv(allAuditEvents);
+    files.push({ name: 'Audit_Trail_All.csv', content: Buffer.from(auditCsv, 'utf-8') });
+
+    // Build ZIP
+    const packDate = new Date().toISOString().slice(0, 10);
+    const fileName = `CBI_Pack_Filtered_${packDate}.zip`;
+    const zipBuffer = await this.createZip(files);
+
+    // Audit
+    await prisma.auditEvent.create({
+      data: {
+        firmId,
+        actorId: generatedBy,
+        action: 'document.inspection_pack_generated',
+        entityType: 'firm',
+        entityId: firmId,
+        metadata: {
+          fileName,
+          renewalCount: renewals.length,
+          fileCount: files.length,
+          filters,
+        },
+      },
+    });
+
+    return { buffer: zipBuffer, fileName, fileCount: files.length };
   }
 }

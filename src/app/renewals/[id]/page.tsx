@@ -21,6 +21,9 @@ interface ChecklistData {
   completedCount: number;
   totalCount: number;
   completionRate: number;
+  dueDate?: string;
+  clientName?: string;
+  policyNumber?: string;
 }
 
 const ITEM_LABELS: Record<string, string> = {
@@ -43,6 +46,60 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: 'bg-red-100 text-red-700',
 };
 
+/**
+ * 40-day countdown bar from expiry date.
+ * Colors: >20 days = green, 7-20 = yellow, <7 = red, overdue = dark red.
+ */
+function CountdownBar({ dueDate }: { dueDate: string }) {
+  const now = new Date();
+  const expiry = new Date(dueDate);
+  const daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const totalWindow = 40;
+
+  // Progress: 0% = 40 days remaining, 100% = expiry date
+  const elapsed = totalWindow - daysRemaining;
+  const progressPct = Math.min(100, Math.max(0, (elapsed / totalWindow) * 100));
+
+  let barColor: string;
+  let textColor: string;
+  if (daysRemaining <= 0) {
+    barColor = 'bg-red-900';
+    textColor = 'text-red-900';
+  } else if (daysRemaining < 7) {
+    barColor = 'bg-red-500';
+    textColor = 'text-red-600';
+  } else if (daysRemaining <= 20) {
+    barColor = 'bg-yellow-500';
+    textColor = 'text-yellow-600';
+  } else {
+    barColor = 'bg-green-500';
+    textColor = 'text-green-600';
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-medium text-gray-500">40-Day Renewal Countdown</h2>
+        <span className={`text-sm font-semibold ${textColor}`}>
+          {daysRemaining <= 0
+            ? `${Math.abs(daysRemaining)} days overdue`
+            : `${daysRemaining} days remaining`}
+        </span>
+      </div>
+      <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${barColor} rounded-full transition-all`}
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+      <div className="flex justify-between mt-1 text-xs text-gray-400">
+        <span>40 days before</span>
+        <span>Expiry: {new Date(dueDate).toLocaleDateString('en-IE')}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function ChecklistPage() {
   const params = useParams();
   const renewalId = params.id as string;
@@ -52,6 +109,7 @@ export default function ChecklistPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({});
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   async function loadChecklist() {
     try {
@@ -89,6 +147,38 @@ export default function ChecklistPage() {
     }
   }
 
+  async function handleUploadEvidence(itemId: string, file: File) {
+    setUploadingId(itemId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('checklistItemId', itemId);
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const data = await uploadRes.json();
+        alert(data.error?.message || 'Upload failed');
+        return;
+      }
+
+      const uploadData = await uploadRes.json();
+
+      // Auto-complete the checklist item with evidence
+      await handleAction(itemId, 'complete', {
+        evidenceUrl: uploadData.data.fileUrl,
+        notes: `Evidence uploaded: ${uploadData.data.fileName}`,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
   if (loading) return <div className="p-8 text-gray-500">Loading checklist...</div>;
   if (!checklist) return <div className="p-8 text-red-500">Failed to load checklist</div>;
 
@@ -105,6 +195,9 @@ export default function ChecklistPage() {
           />
         </div>
       </div>
+
+      {/* 40-Day Countdown Bar */}
+      {checklist.dueDate && <CountdownBar dueDate={checklist.dueDate} />}
 
       <div className="space-y-4">
         {checklist.items.map(item => {
@@ -203,6 +296,35 @@ export default function ChecklistPage() {
                   />
                 </div>
               )}
+
+              {/* Evidence display & upload */}
+              <div className="mt-3 flex items-center gap-3">
+                {item.evidenceUrl && (
+                  <a
+                    href={item.evidenceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    📎 View evidence
+                  </a>
+                )}
+                {(item.status === 'pending' || item.status === 'rejected') && (
+                  <label className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200 cursor-pointer disabled:opacity-50">
+                    {uploadingId === item.id ? '⏳ Uploading...' : '📤 Upload Evidence'}
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.eml"
+                      className="hidden"
+                      disabled={uploadingId !== null}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadEvidence(item.id, file);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           );
         })}

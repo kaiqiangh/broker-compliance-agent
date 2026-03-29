@@ -2,14 +2,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { parseCSV } from '@/lib/csv-parser';
-import { ImportService } from '@/services/import-service';
-
-const importService = new ImportService();
 
 /**
  * Standard field names the platform expects.
- * Maps from canonical name → description.
  */
 const TARGET_FIELDS: Record<string, { label: string; required: boolean; examples: string[] }> = {
   policyNumber: { label: 'Policy Number', required: true, examples: ['PolicyRef', 'PolicyNo', 'Policy #', 'Reference'] },
@@ -28,20 +25,60 @@ const TARGET_FIELDS: Record<string, { label: string; required: boolean; examples
 };
 
 /**
+ * GET /api/import/mapping
+ * Returns the firm's saved import mapping (if any) plus target field definitions.
+ */
+export const GET = withAuth('import', async (user) => {
+  const firm = await prisma.firm.findUnique({
+    where: { id: user.firmId },
+    select: { importMapping: true },
+  });
+
+  return NextResponse.json({
+    targetFields: TARGET_FIELDS,
+    savedMapping: firm?.importMapping ?? null,
+  });
+});
+
+/**
  * POST /api/import/mapping
  *
- * Given a CSV file, return the detected headers and allow the user
- * to manually map columns to target fields.
- *
- * Body: multipart/form-data with 'file' field
- * Response: { headers: string[], targetFields: Record, preview: Row[] }
+ * Two modes:
+ * 1. With file (multipart): analyze CSV → return headers + suggestions + preview
+ * 2. With JSON body { mapping: {...} }: save mapping config to firm
  */
 export const POST = withAuth('import', async (user, request) => {
+  const contentType = request.headers.get('content-type') || '';
+
+  // Mode 2: JSON body — save mapping
+  if (contentType.includes('application/json')) {
+    const body = await request.json();
+    const mapping = body.mapping;
+
+    if (!mapping || typeof mapping !== 'object') {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'Invalid mapping object' } },
+        { status: 400 }
+      );
+    }
+
+    await prisma.firm.update({
+      where: { id: user.firmId },
+      data: { importMapping: mapping },
+    });
+
+    return NextResponse.json({ success: true, mapping });
+  }
+
+  // Mode 1: File upload — analyze and suggest
   const formData = await request.formData();
   const file = formData.get('file') as File | null;
 
   if (!file) {
-    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'No file provided' } }, { status: 400 });
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: 'No file provided' } },
+      { status: 400 }
+    );
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -49,13 +86,8 @@ export const POST = withAuth('import', async (user, request) => {
   // Try auto-detection first
   const autoResult = parseCSV(buffer);
 
-  // Get raw headers from the file
-  const raw = buffer.toString('utf-8');
-  const firstLine = raw.split('\n')[0] || '';
-  const headers = firstLine
-    .replace(/^\uFEFF/, '') // BOM
-    .split(',')
-    .map(h => h.trim().replace(/^["']|["']$/g, ''));
+  // Get headers from parsed result (handles delimiters, BOM, quoting)
+  const headers = autoResult.headers;
 
   // Auto-suggest mappings based on fuzzy matching
   const suggestedMappings: Record<string, string | null> = {};
@@ -67,19 +99,17 @@ export const POST = withAuth('import', async (user, request) => {
     suggestedMappings[targetField] = match || null;
   }
 
-  // Parse first few rows for preview (raw, unmapped)
-  const records = raw.split('\n').slice(1, 6).filter(l => l.trim());
-  const preview = records.map(record => {
-    const values = record.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => { row[h] = values[i] || ''; });
-    return row;
+  // Also load any previously saved mapping for this firm
+  const firm = await prisma.firm.findUnique({
+    where: { id: user.firmId },
+    select: { importMapping: true },
   });
 
   return NextResponse.json({
     headers,
     targetFields: TARGET_FIELDS,
     suggestedMappings,
+    savedMapping: firm?.importMapping ?? null,
     autoDetectedFormat: autoResult.format,
     autoDetectedConfidence: autoResult.confidence,
     autoParseResult: autoResult.format !== 'unknown' ? {
@@ -87,6 +117,6 @@ export const POST = withAuth('import', async (user, request) => {
       errorCount: autoResult.errors.length,
       errors: autoResult.errors.slice(0, 10),
     } : null,
-    preview,
+    preview: autoResult.policies.slice(0, 5).map(p => ({ ...p })),
   });
 });

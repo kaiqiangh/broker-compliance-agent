@@ -68,6 +68,7 @@ export const POST = withAuth('import', async (user, request) => {
       rowCount: result.importedRows,
       errorCount: result.errorRows,
       skippedRows: result.skippedRows,
+      needsReviewRows: result.needsReviewRows,
       totalRows: result.totalRows,
       errors: result.errors.slice(0, 20),
     });
@@ -99,6 +100,6 @@ export const POST = withAuth('import', async (user, request) => {
     rowCount: result.policies.length,
     errorCount: result.errors.length,
     errors: result.errors.slice(0, 20),
-    preview: result.policies.slice(0, 10),
+    preview: result.policies.slice(0, 20),
   });
 });

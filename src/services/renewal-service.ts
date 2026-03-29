@@ -126,6 +126,16 @@ export class RenewalService {
   async getDashboardStats(firmId: string) {
     const renewals = await this.getTimeline(firmId);
 
+    // Current quarter filter for compliance score
+    const now = new Date();
+    const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0, 23, 59, 59, 999);
+
+    const quarterlyRenewals = renewals.filter(r => {
+      const due = new Date(r.dueDate);
+      return due >= quarterStart && due <= quarterEnd;
+    });
+
     const byStatus = {
       pending: 0,
       in_progress: 0,
@@ -139,9 +149,11 @@ export class RenewalService {
     }
 
     const total = renewals.length;
-    const complianceRate = total > 0
-      ? Math.round((byStatus.compliant / total) * 100)
-      : 100;
+    const quarterlyTotal = quarterlyRenewals.length;
+    const quarterlyCompliant = quarterlyRenewals.filter(r => r.status === 'compliant').length;
+    const complianceRate = quarterlyTotal > 0
+      ? Math.round((quarterlyCompliant / quarterlyTotal) * 100)
+      : (total > 0 ? Math.round((byStatus.compliant / total) * 100) : 100);
 
     const upcomingDeadlines = renewals
       .filter(r => r.daysUntilDue <= 30 && r.daysUntilDue >= 0)
@@ -156,6 +168,7 @@ export class RenewalService {
       totalRenewals: total,
       byStatus,
       complianceRate,
+      compliancePeriod: 'quarter',
       upcomingDeadlines,
       overdueItems,
     };

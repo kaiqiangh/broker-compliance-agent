@@ -1,5 +1,9 @@
 import { prisma } from '../lib/prisma';
 import { NotificationService } from '../services/notification-service';
+import { DocumentService } from '../services/document-service';
+import { htmlToPdf } from '../lib/pdf';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 const POLL_INTERVAL_MS = 30_000; // 30 seconds
 const RETRY_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes base
@@ -104,8 +108,43 @@ async function executeJob(jobType: string, payload: any) {
       break;
     }
     case 'generate_document': {
-      // Document generation placeholder
-      console.log(`[Worker] Document generation: ${JSON.stringify(payload)}`);
+      const { firmId, renewalId, documentType, generatedBy } = payload;
+      if (!firmId || !renewalId || !documentType || !generatedBy) {
+        throw new Error('generate_document requires firmId, renewalId, documentType, generatedBy');
+      }
+
+      const docService = new DocumentService();
+
+      // Generate HTML
+      const result = await docService.generate(
+        firmId,
+        renewalId,
+        documentType,
+        generatedBy
+      );
+
+      // Convert to PDF
+      const pdfBuffer = await htmlToPdf(result.html);
+
+      // Store PDF locally
+      const uploadDir = path.join(process.cwd(), 'uploads', firmId, renewalId);
+      await fs.mkdir(uploadDir, { recursive: true });
+      const fileName = `${documentType}.pdf`;
+      const filePath = path.join(uploadDir, fileName);
+      await fs.writeFile(filePath, pdfBuffer);
+
+      const fileUrl = `/api/files/${firmId}/${renewalId}/${fileName}`;
+
+      // Update document record
+      await prisma.document.update({
+        where: { id: result.id },
+        data: {
+          status: 'completed',
+          fileUrl,
+        },
+      });
+
+      console.log(`[Worker] Document generated: ${documentType} for renewal ${renewalId} → ${fileUrl}`);
       break;
     }
     case 'gdpr_erasure': {
