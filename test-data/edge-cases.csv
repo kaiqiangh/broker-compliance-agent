@@ -1,0 +1,11 @@
+PolicyRef,ClientName,ClientAddress,PolicyType,InsurerName,InceptionDate,ExpiryDate,Premium,Commission
+POL-DUP-001,Test Client,123 Test Street,Motor,Aviva,01/01/2024,01/01/2025,€1,000.00,12.5
+POL-DUP-001,Test Client,123 Test Street,Motor,Aviva,01/01/2024,01/01/2025,€1,000.00,12.5
+POL-SPACES,  Client With Spaces  ,  456 Space Road  ,Home,Allianz,15/06/2024,15/06/2025,€500.00,15.0
+POL-CASE,lowercase policy ref,789 Case Ave,Commercial,Zurich,01/03/2024,01/03/2025,"€2,500.00",10.0
+POL-MISSING,,Missing Client Name,Motor,FBD,01/04/2024,01/04/2025,€800.00,12.5
+POL-FUTURE,Future Policy,999 Future Lane,Motor,AXA,01/01/2030,01/01/2031,€1,200.00,12.5
+POL-BADDATE,Date Problem,111 Date Street,Home,Aviva,not-a-date,also-not-a-date,€700.00,15.0
+POL-NEGATIVE,Negative Premium,222 Negative Road,Motor,Allianz,01/05/2024,01/05/2025,-€500.00,12.5
+POL-SCRIPT,XSS Test <script>alert(1)</script>,333 Script Blvd,Motor,Zurich,01/07/2024,01/07/2025,"€1,100.00",12.5
+POL-FORMULA,=CMD('/calc'),444 Formula St,Motor,FBD,01/08/2024,01/08/2025,"€950.00",12.5

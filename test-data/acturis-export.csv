@@ -1,0 +1,7 @@
+PolicyNo,InsuredName,AddressLine1,AddressLine2,City,Postcode,Class,Insurer,EffectiveDate,ExpirationDate,GrossPremium,CommissionRate,Status,Claims
+ACT-2024-001,Michael Collins,10 Grafton Street,,Dublin,D02 X286,Motor,Allianz Ireland,2024-04-01,2025-04-01,1350.00,12.5,Active,0
+ACT-2024-002,Emma Fitzgerald,5 Patrick Street,Unit 3,Cork,T12 K286,Commercial,Aviva Insurance,2024-06-15,2025-06-15,5200.00,10.0,Active,1
+ACT-2024-003,Brian O'Sullivan,22 Eyre Square,,Galway,H91 K286,Home,Zurich Insurance,2024-03-01,2025-03-01,950.00,15.0,Active,0
+ACT-2024-004,Rachel Byrne,18 Main Street,,Drogheda,A92 K286,Motor,FBD Insurance,2024-08-20,2025-08-20,1420.00,12.5,Active,2
+ACT-2024-005,Declan Hughes,Industrial Estate,Lot 12,Dundalk,A91 K286,Commercial,Liberty Insurance,2024-01-10,2025-01-10,8750.00,8.5,Active,0
+ACT-2024-006,Karen Doyle,7 Harbour View,,Wexford,Y35 K286,Health,Irish Life,2024-07-01,2025-07-01,1800.00,18.0,Active,0

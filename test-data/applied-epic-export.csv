@@ -1,0 +1,9 @@
+PolicyRef,ClientName,ClientAddress,PolicyType,InsurerName,InceptionDate,ExpiryDate,Premium,Commission,NCB,VehicleReg,CoverType
+POL-2024-001,Seán O'Brien,14 Main Street Dublin 4,Motor,Aviva Insurance,01/04/2024,01/04/2025,"€1,245.00",12.5,5,241-D-12345,Comprehensive
+POL-2024-002,Ciara Murphy,22 Oak Road Cork T12,Home,Allianz Ireland,15/03/2024,15/03/2025,"€890.50",15.0,,,
+POL-2024-003,Patrick Kelly,8 Church Lane Galway,Commercial,Zurich Insurance,01/06/2024,01/06/2025,"€4,520.00",10.0,,,
+POL-2024-004,Aoife Walsh,45 River Walk Limerick V94,Motor,FBD Insurance,20/07/2024,20/07/2025,"€1,680.00",12.5,3,242-W-67890,Third Party Fire & Theft
+POL-2024-005,Liam Brennan,3 Castle Street Dublin 2,Life,Irish Life,01/01/2024,01/01/2025,"€2,100.00",20.0,,,
+POL-2024-006,Niamh Doyle,17 Ballymount Ave Dublin 12,Home,AXA Ireland,10/09/2024,10/09/2025,"€720.00",15.0,,,
+POL-2024-007,Conor Ryan,Business Park Unit 5 Waterford,Commercial,Liberty Insurance,01/11/2024,01/11/2025,"€3,850.00",10.0,,,
+POL-2024-008,Sinead Farrell,29 Green Road Kildare,Motor,Aviva Insurance,15/05/2024,15/05/2025,"€1,100.00",12.5,7,232-F-11111,Comprehensive

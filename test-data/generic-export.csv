@@ -1,0 +1,6 @@
+Policy Number,Customer Name,Address,Type,Insurer Company,Start Date,End Date,Annual Premium,Notes
+GEN-001,John McCarthy,15 High Street Dublin 8,Motor Insurance,Aviva,01/03/2024,01/03/2025,"€1,150.00",Renewal client
+GEN-002,Mary Nolan,Apartment 4B River Walk Cork,House Insurance,Allianz,15/06/2024,15/06/2025,"€680.00",New policy
+GEN-003,Thomas Daly,Unit 8 Business Centre Galway,Business Insurance,AXA,01/09/2024,01/09/2025,"€3,200.00",Multi-year client
+GEN-004,Sarah Connor,22 Oak Avenue Limerick,Car Insurance,FBD,10/04/2024,10/04/2025,"€1,350.00",Claims history
+GEN-005,James Power,5 Marina Court Waterford,Home Insurance,Zurich,01/11/2024,01/11/2025,"€820.00",Preferred client
