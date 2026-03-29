@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface PreviewResult {
   format: string;
@@ -8,8 +8,24 @@ interface PreviewResult {
   headers: string[];
   rowCount: number;
   errorCount: number;
+  needsReviewRows?: number;
   errors: Array<{ row: number; field: string; error: string }>;
   preview: Array<Record<string, unknown>>;
+}
+
+interface TargetField {
+  label: string;
+  required: boolean;
+  examples: string[];
+}
+
+interface MappingAnalysis {
+  headers: string[];
+  targetFields: Record<string, TargetField>;
+  suggestedMappings: Record<string, string | null>;
+  savedMapping: Record<string, string | null> | null;
+  autoDetectedFormat: string;
+  autoDetectedConfidence: number;
 }
 
 export default function ImportPage() {
@@ -19,9 +35,14 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [importResult, setImportResult] = useState<{
-    imported: number; skipped: number; errors: number;
+    imported: number; skipped: number; errors: number; needsReview: number;
   } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Mapping state
+  const [mappingAnalysis, setMappingAnalysis] = useState<MappingAnalysis | null>(null);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [mappingSaving, setMappingSaving] = useState(false);
 
   async function handleFile(file: File) {
     setFileName(file.name);
@@ -29,23 +50,64 @@ export default function ImportPage() {
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Analyze file for mapping
+      const analysisForm = new FormData();
+      analysisForm.append('file', file);
 
-      const res = await fetch('/api/import', { method: 'POST', body: formData });
-      const data = await res.json();
+      const [previewRes, mappingRes] = await Promise.all([
+        fetch('/api/import', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('file', file); return fd; })() }),
+        fetch('/api/import/mapping', { method: 'POST', body: analysisForm }),
+      ]);
 
-      if (!res.ok) {
-        setError(data.error || 'Import failed');
+      const previewData = await previewRes.json();
+      const mappingData = await mappingRes.json();
+
+      if (!previewRes.ok) {
+        setError(previewData.error?.message || previewData.error || 'Import failed');
         return;
       }
 
-      setPreview(data);
-      setStep('mapping');
+      setPreview(previewData);
+      setMappingAnalysis(mappingData);
+
+      // Determine initial mapping: saved > suggested > empty
+      const initialMapping: Record<string, string> = {};
+      const source = mappingData.savedMapping || mappingData.suggestedMappings || {};
+      for (const [key, val] of Object.entries(source)) {
+        if (val) initialMapping[key] = val as string;
+      }
+      setColumnMapping(initialMapping);
+
+      // If format is well-detected, skip manual mapping
+      if (mappingData.autoDetectedFormat !== 'unknown' && mappingData.autoDetectedConfidence >= 0.75) {
+        setStep('mapping');
+      } else {
+        setStep('mapping');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSaveMapping() {
+    if (!mappingAnalysis) return;
+    setMappingSaving(true);
+    try {
+      const res = await fetch('/api/import/mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapping: columnMapping }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error?.message || 'Failed to save mapping');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save mapping');
+    } finally {
+      setMappingSaving(false);
     }
   }
 
@@ -54,7 +116,6 @@ export default function ImportPage() {
     setLoading(true);
 
     try {
-      // Re-upload the file to actually import (server already parsed during preview)
       const file = fileRef.current?.files?.[0];
       if (!file) {
         setError('File not found. Please re-upload.');
@@ -70,7 +131,7 @@ export default function ImportPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Import failed');
+        setError(data.error?.message || data.error || 'Import failed');
         return;
       }
 
@@ -78,6 +139,7 @@ export default function ImportPage() {
         imported: data.rowCount || 0,
         skipped: data.skippedRows || 0,
         errors: data.errorCount || 0,
+        needsReview: data.needsReviewRows || 0,
       });
       setStep('complete');
     } catch (err) {
@@ -157,23 +219,91 @@ export default function ImportPage() {
         </div>
       )}
 
-      {/* Step 2: Mapping + Validation */}
-      {(step === 'mapping' || step === 'validation') && preview && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8">
-          <div className="mb-6 p-4 bg-green-50 rounded-lg flex items-center gap-3">
-            <span className="text-green-600 text-lg">✓</span>
+      {/* Step 2: Mapping */}
+      {step === 'mapping' && preview && mappingAnalysis && (
+        <div className="space-y-6">
+          {/* Format Detection Summary */}
+          <div className={`rounded-lg p-4 flex items-center gap-3 ${
+            mappingAnalysis.autoDetectedFormat !== 'unknown'
+              ? 'bg-green-50' : 'bg-amber-50'
+          }`}>
+            <span className={`text-lg ${mappingAnalysis.autoDetectedFormat !== 'unknown' ? 'text-green-600' : 'text-amber-600'}`}>
+              {mappingAnalysis.autoDetectedFormat !== 'unknown' ? '✓' : '⚠'}
+            </span>
             <div>
-              <p className="font-medium text-green-900">
-                Format: {preview.format} ({Math.round(preview.confidence * 100)}% confidence)
+              <p className={`font-medium ${
+                mappingAnalysis.autoDetectedFormat !== 'unknown' ? 'text-green-900' : 'text-amber-900'
+              }`}>
+                {mappingAnalysis.autoDetectedFormat !== 'unknown'
+                  ? `Format detected: ${mappingAnalysis.autoDetectedFormat} (${Math.round(mappingAnalysis.autoDetectedConfidence * 100)}% confidence)`
+                  : 'Format not recognised — please map columns manually'
+                }
               </p>
-              <p className="text-sm text-green-700">
+              <p className={`text-sm ${
+                mappingAnalysis.autoDetectedFormat !== 'unknown' ? 'text-green-700' : 'text-amber-700'
+              }`}>
                 {preview.rowCount} valid rows, {preview.errorCount} errors · File: {fileName}
               </p>
             </div>
           </div>
 
+          {/* Interactive Column Mapping */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-700">Column Mapping</h3>
+              <button
+                onClick={handleSaveMapping}
+                disabled={mappingSaving}
+                className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
+              >
+                {mappingSaving ? 'Saving...' : 'Save Mapping'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.entries(mappingAnalysis.targetFields).map(([fieldKey, fieldConfig]) => (
+                <div key={fieldKey} className="flex items-center gap-3">
+                  <label className="w-36 text-sm text-gray-600 flex-shrink-0">
+                    {fieldConfig.label}
+                    {fieldConfig.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <select
+                    value={columnMapping[fieldKey] || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setColumnMapping(prev => {
+                        const next = { ...prev };
+                        if (val) {
+                          next[fieldKey] = val;
+                        } else {
+                          delete next[fieldKey];
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`flex-1 text-sm border rounded px-2 py-1.5 ${
+                      fieldConfig.required && !columnMapping[fieldKey]
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">— not mapped —</option>
+                    {mappingAnalysis.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-gray-400 mt-3">
+              CSV columns detected: {mappingAnalysis.headers.join(', ')}
+            </p>
+          </div>
+
+          {/* Errors */}
           {preview.errors.length > 0 && (
-            <div className="mb-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Errors ({preview.errorCount})</h3>
               <div className="bg-red-50 rounded-lg p-4 max-h-40 overflow-y-auto">
                 {preview.errors.slice(0, 10).map((e, i) => (
@@ -188,31 +318,35 @@ export default function ImportPage() {
             </div>
           )}
 
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Preview</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  {preview.headers.slice(0, 8).map(h => (
-                    <th key={h} className="text-left py-2 px-3 font-medium text-gray-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {preview.preview.slice(0, 5).map((row, i) => (
-                  <tr key={i}>
+          {/* Preview Table */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Preview (first {Math.min(preview.preview.length, 20)} rows)</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
                     {preview.headers.slice(0, 8).map(h => (
-                      <td key={h} className="py-2 px-3 truncate max-w-32">{String(row[h] ?? '')}</td>
+                      <th key={h} className="text-left py-2 px-3 font-medium text-gray-500">{h}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {preview.preview.slice(0, 5).map((row, i) => (
+                    <tr key={i}>
+                      {preview.headers.slice(0, 8).map(h => (
+                        <td key={h} className="py-2 px-3 truncate max-w-32">{String(row[h] ?? '')}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="mt-6 flex gap-4">
+          {/* Navigation */}
+          <div className="flex gap-4">
             <button
-              onClick={() => { setStep('upload'); setPreview(null); }}
+              onClick={() => { setStep('upload'); setPreview(null); setMappingAnalysis(null); }}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
             >
               ← Back
@@ -229,7 +363,7 @@ export default function ImportPage() {
 
       {/* Step 3: Validation confirmation */}
       {step === 'validation' && preview && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 mt-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-8">
           <h2 className="text-lg font-semibold mb-4">Confirm Import</h2>
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="text-center p-4 bg-green-50 rounded-lg">
@@ -262,13 +396,33 @@ export default function ImportPage() {
             <span className="text-3xl">✓</span>
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Import Complete</h2>
-          <p className="text-gray-500 mb-6">{importResult.imported} policies imported from {fileName}</p>
+          <p className="text-gray-500 mb-4">{importResult.imported} policies imported from {fileName}</p>
+          <div className="flex gap-4 justify-center mb-6">
+            <div className="text-center p-3 bg-green-50 rounded-lg">
+              <p className="text-lg font-bold text-green-600">{importResult.imported}</p>
+              <p className="text-xs text-gray-500">Imported</p>
+            </div>
+            <div className="text-center p-3 bg-gray-50 rounded-lg">
+              <p className="text-lg font-bold text-gray-600">{importResult.skipped}</p>
+              <p className="text-xs text-gray-500">Skipped</p>
+            </div>
+            {importResult.needsReview > 0 && (
+              <div className="text-center p-3 bg-amber-50 rounded-lg">
+                <p className="text-lg font-bold text-amber-600">{importResult.needsReview}</p>
+                <p className="text-xs text-gray-500">Needs Review</p>
+              </div>
+            )}
+            <div className="text-center p-3 bg-red-50 rounded-lg">
+              <p className="text-lg font-bold text-red-600">{importResult.errors}</p>
+              <p className="text-xs text-gray-500">Errors</p>
+            </div>
+          </div>
           <div className="flex gap-4 justify-center">
             <a href="/dashboard" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
               Go to Dashboard
             </a>
             <button
-              onClick={() => { setStep('upload'); setPreview(null); setImportResult(null); }}
+              onClick={() => { setStep('upload'); setPreview(null); setImportResult(null); setMappingAnalysis(null); }}
               className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
             >
               Import More
