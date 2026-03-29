@@ -86,6 +86,7 @@ model Policy {
   inceptionDate         DateTime  @map("inception_date")
   expiryDate            DateTime  @map("expiry_date")
   premium               Decimal   @db.Decimal(10, 2)
+  commissionRate        Decimal?  @map("commission_rate") @db.Decimal(5, 2)
   ncb                   Int?
   policyStatus          String    @default("active") @map("policy_status") // active, cancelled, lapsed, not_in_export
   dedupHash             String?   @map("dedup_hash")

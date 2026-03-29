@@ -126,6 +126,7 @@ export class ImportService {
             inceptionDate: new Date(policy.inceptionDate),
             expiryDate: new Date(policy.expiryDate),
             premium: policy.premium,
+            commissionRate: policy.commission ?? null,
             ncb: policy.ncb ?? null,
             policyStatus: policy.status || 'active',
             dedupHash,

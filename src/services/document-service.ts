@@ -157,7 +157,7 @@ export class DocumentService {
         firmName: renewal.firm.name,
         firmAddress: '',
         adviserName: renewal.policy.adviser?.name || 'Adviser',
-        commissionRate: 12.5, // TODO: add commission_rate field to Policy model
+        commissionRate: renewal.policy.commissionRate ? Number(renewal.policy.commissionRate) : 12.5,
         cpcVersion: '2012',
       });
     }
