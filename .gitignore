@@ -30,3 +30,6 @@ prisma/*.db
 # IDE
 .vscode/
 .idea/
+
+# uploads
+uploads/
