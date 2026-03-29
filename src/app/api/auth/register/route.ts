@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     });
     if (existing) {
       return NextResponse.json(
-        { error: 'An account with this email already exists' },
+        { error: { code: 'CONFLICT', message: 'An account with this email already exists' } },
         { status: 409 }
       );
     }
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof z.ZodError) {
       console.warn('Register validation error [redacted]:', err.errors.length, 'issues');
-      return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
+      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid input' } }, { status: 400 });
     }
     console.warn('Register error [redacted]:', err instanceof Error ? err.message : 'unknown');
     return NextResponse.json({ error: { code: 'ERROR', message: 'Internal server error' } }, { status: 500 });

@@ -80,7 +80,7 @@ export const POST = withAuth('import', async (user, request) => {
   // Enforce row limit
   if (result.policies.length > MAX_ROWS) {
     return NextResponse.json(
-      { error: `Too many rows. Max ${MAX_ROWS}.` },
+      { error: { code: 'VALIDATION_ERROR', message: `Too many rows. Max ${MAX_ROWS}.` } },
       { status: 400 }
     );
   }

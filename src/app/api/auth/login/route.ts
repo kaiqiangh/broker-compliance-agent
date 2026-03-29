@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const user = await authenticateUser(email, password);
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } },
         { status: 401 }
       );
     }
