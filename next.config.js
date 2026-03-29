@@ -1,9 +1,14 @@
 /** @type {import('next').NextConfig} */
+const isDev = process.env.NODE_ENV !== 'production';
+
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['puppeteer'],
   },
   async headers() {
+    // Skip strict security headers in dev mode (breaks HMR / react-refresh)
+    if (isDev) return [];
+
     return [
       {
         source: '/(.*)',
