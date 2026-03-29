@@ -25,7 +25,8 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Login failed');
+        const errMsg = typeof data.error === 'object' ? data.error.message : (data.error || 'Login failed');
+        setError(errMsg);
         return;
       }
 

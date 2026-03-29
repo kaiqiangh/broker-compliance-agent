@@ -5,8 +5,12 @@ import type { NextRequest } from 'next/server';
 const PUBLIC_PATHS = [
   '/login',
   '/register',
+  '/forgot-password',
+  '/reset-password',
   '/api/auth/login',
   '/api/auth/register',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
   '/api/health',
 ];
 
@@ -59,7 +63,9 @@ export function middleware(request: NextRequest) {
     // Skip CSRF check for auth endpoints (user hasn't got a CSRF token yet)
     const isAuthEndpoint =
       pathname.startsWith('/api/auth/login') ||
-      pathname.startsWith('/api/auth/register');
+      pathname.startsWith('/api/auth/register') ||
+      pathname.startsWith('/api/auth/forgot-password') ||
+      pathname.startsWith('/api/auth/reset-password');
 
     if (!isAuthEndpoint) {
       const cookieToken = getCsrfTokenFromCookie(request);
