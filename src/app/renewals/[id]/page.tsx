@@ -206,6 +206,46 @@ export default function ChecklistPage() {
           );
         })}
       </div>
+
+      {/* Document Generation */}
+      <div className="mt-8 bg-white rounded-lg border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold mb-4">Generate Documents</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Generate CPC-compliant documents for this renewal.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/documents', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ renewalId, documentType: 'renewal_notification' }),
+                });
+                if (!res.ok) throw new Error('Generation failed');
+                const data = await res.json();
+                // Open generated HTML in new window
+                const win = window.open('', '_blank');
+                if (win) {
+                  win.document.write(data.data.html);
+                  win.document.close();
+                }
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Generation failed');
+              }
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            📄 Renewal Notification Letter
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            🖨️ Print
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

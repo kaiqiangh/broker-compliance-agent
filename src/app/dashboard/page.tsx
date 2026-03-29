@@ -91,7 +91,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <p className="text-sm font-medium text-gray-500">Total Renewals</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalRenewals}</p>
@@ -120,7 +120,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Status Breakdown */}
-      <div className="grid grid-cols-5 gap-3 mb-8">
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3 mb-8">
         {[
           { label: 'Pending', count: stats.byStatus.pending, color: 'bg-gray-500' },
           { label: 'In Progress', count: stats.byStatus.in_progress, color: 'bg-blue-500' },
