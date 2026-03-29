@@ -125,10 +125,10 @@ beforeEach(() => {
   vi.mocked(prisma.import.create).mockResolvedValue({ id: 'import-1' } as any);
   vi.mocked(prisma.import.update).mockResolvedValue({} as any);
   vi.mocked(prisma.auditEvent.create).mockResolvedValue({} as any);
-  vi.mocked(prisma._tx.policy.create).mockResolvedValue({} as any);
-  vi.mocked(prisma._tx.policy.update).mockResolvedValue({} as any);
-  vi.mocked(prisma._tx.client.create).mockResolvedValue(existingClient() as any);
-  vi.mocked(prisma._tx.auditEvent.create).mockResolvedValue({} as any);
+  vi.mocked((prisma as any)._tx.policy.create).mockResolvedValue({} as any);
+  vi.mocked((prisma as any)._tx.policy.update).mockResolvedValue({} as any);
+  vi.mocked((prisma as any)._tx.client.create).mockResolvedValue(existingClient() as any);
+  vi.mocked((prisma as any)._tx.auditEvent.create).mockResolvedValue({} as any);
   mockFuzzyMatchPolicy.mockReturnValue({ matched: false, similarity: 0, confidence: 0, matchTier: 'none' });
 });
 
@@ -164,7 +164,7 @@ describe('ImportService.import', () => {
     await service.import(firmId, Buffer.from('csv'), importedBy);
 
     // Should create client inside transaction
-    expect(prisma._tx.client.create).toHaveBeenCalledWith({
+    expect((prisma as any)._tx.client.create).toHaveBeenCalledWith({
       data: {
         firmId,
         name: policy.clientName,
@@ -173,7 +173,7 @@ describe('ImportService.import', () => {
     });
 
     // Should create policy inside transaction
-    expect(prisma._tx.policy.create).toHaveBeenCalledWith({
+    expect((prisma as any)._tx.policy.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         firmId,
         policyNumber: policy.policyNumber,
@@ -200,7 +200,7 @@ describe('ImportService.import', () => {
     const result = await service.import(firmId, Buffer.from('csv'), importedBy);
 
     expect(prisma.$transaction).toHaveBeenCalled();
-    expect(prisma._tx.policy.update).toHaveBeenCalledWith(
+    expect((prisma as any)._tx.policy.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'existing-pol-1' },
         data: expect.objectContaining({
@@ -228,7 +228,7 @@ describe('ImportService.import', () => {
     expect(result.skippedRows).toBe(1);
     expect(result.importedRows).toBe(0);
     // No update call outside of the import.update at the end
-    const updateCalls = vi.mocked(prisma._tx.policy.update).mock.calls;
+    const updateCalls = vi.mocked((prisma as any)._tx.policy.update).mock.calls;
     expect(updateCalls.length).toBe(0);
   });
 
@@ -245,7 +245,7 @@ describe('ImportService.import', () => {
 
     const result = await service.import(firmId, Buffer.from('csv'), importedBy);
 
-    expect(prisma._tx.policy.update).toHaveBeenCalledWith(
+    expect((prisma as any)._tx.policy.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'existing-pol-1' },
         data: expect.objectContaining({
@@ -282,7 +282,7 @@ describe('ImportService.import', () => {
 
     const result = await service.import(firmId, Buffer.from('csv'), importedBy);
 
-    expect(prisma._tx.policy.update).toHaveBeenCalledWith(
+    expect((prisma as any)._tx.policy.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: existing.id },
         data: expect.objectContaining({
@@ -336,10 +336,10 @@ describe('ImportService.import', () => {
     await service.import(firmId, Buffer.from('csv'), importedBy);
 
     // Client should NOT be created — it was found by name
-    expect(prisma._tx.client.create).not.toHaveBeenCalled();
+    expect((prisma as any)._tx.client.create).not.toHaveBeenCalled();
 
     // Both policies should be created with the same clientId
-    const policyCreateCalls = vi.mocked(prisma._tx.policy.create).mock.calls;
+    const policyCreateCalls = vi.mocked((prisma as any)._tx.policy.create).mock.calls;
     expect(policyCreateCalls.length).toBe(2);
     expect(policyCreateCalls[0][0].data.clientId).toBe('client-1');
     expect(policyCreateCalls[1][0].data.clientId).toBe('client-1');
