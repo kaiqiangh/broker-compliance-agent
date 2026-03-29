@@ -6,16 +6,17 @@ import { ChecklistService } from '@/services/checklist-service';
 
 const checklistService = new ChecklistService();
 
-export const GET = withAuth('view_all', async (user, request) => {
-  // Extract renewal ID from URL: /api/renewals/{id}/checklist
-  const url = new URL(request.url);
-  const segments = url.pathname.split('/');
-  const renewalId = segments[segments.indexOf('renewals') + 1];
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: renewalId } = await params;
+  return withAuth('view_all', async (user) => {
+    if (!renewalId) {
+      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Missing renewal ID' } }, { status: 400 });
+    }
 
-  if (!renewalId) {
-    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Missing renewal ID' } }, { status: 400 });
-  }
-
-  const checklist = await checklistService.getRenewalChecklist(user.firmId, renewalId);
-  return NextResponse.json({ data: checklist });
-});
+    const checklist = await checklistService.getRenewalChecklist(user.firmId, renewalId);
+    return NextResponse.json({ data: checklist });
+  })(request);
+}

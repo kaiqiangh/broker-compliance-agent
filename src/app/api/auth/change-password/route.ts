@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth';
+import { withAuth, getUserFromRequest, revokeToken } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { hash, compare } from 'bcryptjs';
 import { z } from 'zod';
@@ -47,6 +47,30 @@ export const POST = withAuth(null, async (user, request) => {
         entityId: user.id,
       },
     });
+
+    // Revoke the current session token so old JWT is invalidated immediately
+    try {
+      const cookieHeader = request.headers.get('cookie');
+      if (cookieHeader) {
+        const cookies = cookieHeader.split(';').reduce((acc, part) => {
+          const [key, ...valueParts] = part.trim().split('=');
+          if (key) acc[key.trim()] = decodeURIComponent(valueParts.join('='));
+          return acc;
+        }, {} as Record<string, string>);
+        const token = cookies['session'];
+        if (token) {
+          const { jwtVerify } = await import('jose');
+          const JWT_SECRET_RAW = process.env.NEXTAUTH_SECRET!;
+          const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
+          const { payload } = await jwtVerify(token, JWT_SECRET, { issuer: 'broker-comply' });
+          const exp = (payload.exp ?? 0) * 1000;
+          const jti = payload.jti ?? (payload.sub as string) + ':' + String(payload.iat);
+          revokeToken(jti, exp);
+        }
+      }
+    } catch {
+      // Best-effort revocation — don't block password change on decode failure
+    }
 
     return NextResponse.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {

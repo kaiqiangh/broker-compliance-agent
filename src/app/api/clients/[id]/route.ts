@@ -15,11 +15,12 @@ const UpdateClientSchema = z.object({
 // GET /api/clients/[id]
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withAuth('view_all', async (user) => {
     const client = await prisma.client.findFirst({
-      where: { id: params.id, firmId: user.firmId },
+      where: { id, firmId: user.firmId },
       include: {
         policies: {
           orderBy: { expiryDate: 'asc' },
@@ -45,15 +46,16 @@ export async function GET(
 // PATCH /api/clients/[id]
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withAuth('import', async (user) => {
     try {
       const body = await request.json();
       const data = UpdateClientSchema.parse(body);
 
       const existing = await prisma.client.findFirst({
-        where: { id: params.id, firmId: user.firmId },
+        where: { id, firmId: user.firmId },
       });
 
       if (!existing) {
@@ -61,7 +63,7 @@ export async function PATCH(
       }
 
       const updated = await prisma.client.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           ...(data.name !== undefined ? { name: data.name } : {}),
           ...(data.email !== undefined ? { email: data.email || null } : {}),
@@ -76,7 +78,7 @@ export async function PATCH(
           actorId: user.id,
           action: 'client.updated',
           entityType: 'client',
-          entityId: params.id,
+          entityId: id,
           metadata: { changes: Object.keys(data) },
         },
       });
@@ -94,11 +96,12 @@ export async function PATCH(
 // DELETE /api/clients/[id]
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withAuth('admin', async (user) => {
     const client = await prisma.client.findFirst({
-      where: { id: params.id, firmId: user.firmId },
+      where: { id, firmId: user.firmId },
     });
 
     if (!client) {
@@ -107,7 +110,7 @@ export async function DELETE(
 
     // Check for active policies before deletion
     const policyCount = await prisma.policy.count({
-      where: { clientId: params.id, firmId: user.firmId },
+      where: { clientId: id, firmId: user.firmId },
     });
 
     if (policyCount > 0) {
@@ -116,7 +119,7 @@ export async function DELETE(
       }, { status: 409 });
     }
 
-    await prisma.client.delete({ where: { id: params.id } });
+    await prisma.client.delete({ where: { id } });
 
     await prisma.auditEvent.create({
       data: {
@@ -124,7 +127,7 @@ export async function DELETE(
         actorId: user.id,
         action: 'client.deleted',
         entityType: 'client',
-        entityId: params.id,
+        entityId: id,
         metadata: { clientName: client.name },
       },
     });

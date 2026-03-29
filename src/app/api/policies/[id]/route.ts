@@ -7,11 +7,12 @@ import { prisma } from '@/lib/prisma';
 // GET /api/policies/[id]
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   return withAuth('view_all', async (user) => {
     const policy = await prisma.policy.findFirst({
-      where: { id: params.id, firmId: user.firmId },
+      where: { id, firmId: user.firmId },
       include: {
         client: true,
         adviser: { select: { id: true, name: true, email: true } },

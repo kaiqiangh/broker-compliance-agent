@@ -26,6 +26,15 @@ export const PUT = withAuth('import', async (user, request) => {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'fileBuffer and mappings required' } }, { status: 400 });
   }
 
+  // Body size limit: max ~2.7MB base64 string ≈ 2MB decoded
+  const MAX_BASE64_LENGTH = Math.ceil(2 * 1024 * 1024 * 4 / 3); // ~2.8MB for 2MB decoded
+  if (fileBuffer.length > MAX_BASE64_LENGTH) {
+    return NextResponse.json(
+      { error: { code: 'PAYLOAD_TOO_LARGE', message: `File too large. Maximum decoded size is 2MB (got base64 length ${fileBuffer.length})` } },
+      { status: 413 }
+    );
+  }
+
   const rawBuffer = Buffer.from(fileBuffer, 'base64');
   const raw = rawBuffer.toString('utf-8');
 

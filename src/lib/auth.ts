@@ -1,6 +1,6 @@
 import { hash, compare } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
-import { prisma, setFirmContext, clearFirmContext } from './prisma';
+import { prisma, runWithFirmContext } from './prisma';
 import { hasPermission, UnauthorizedError, ForbiddenError } from './rbac';
 import type { Permission, Role } from './rbac';
 
@@ -17,14 +17,34 @@ export interface SessionUser {
 // ─── JWT config ──────────────────────────────────────────────
 
 const JWT_SECRET_RAW = process.env.NEXTAUTH_SECRET;
-if (!JWT_SECRET_RAW && process.env.NODE_ENV === 'production') {
-  throw new Error('NEXTAUTH_SECRET environment variable is required in production');
+if (!JWT_SECRET_RAW) {
+  throw new Error('NEXTAUTH_SECRET environment variable is required in all environments');
 }
-const JWT_SECRET = new TextEncoder().encode(
-  JWT_SECRET_RAW || 'local-dev-secret-change-in-production'
-);
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 const JWT_ISSUER = 'broker-comply';
 const SESSION_TTL = '8h';
+
+// ─── Token blocklist ─────────────────────────────────────────
+// In-memory map of revoked token JTI → expiry timestamp (ms).
+// Tokens are added on password change; expired entries are cleaned periodically.
+
+const tokenBlocklist = new Map<string, number>();
+const BLOCKLIST_CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // 15 min
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [jti, exp] of tokenBlocklist) {
+    if (exp <= now) tokenBlocklist.delete(jti);
+  }
+}, BLOCKLIST_CLEANUP_INTERVAL_MS).unref();
+
+export function revokeToken(jti: string, exp: number): void {
+  tokenBlocklist.set(jti, exp);
+}
+
+export function isTokenRevoked(jti: string): boolean {
+  return tokenBlocklist.has(jti);
+}
 
 // ─── Auth helpers ────────────────────────────────────────────
 
@@ -145,6 +165,12 @@ export async function getSession(token: string): Promise<SessionUser | null> {
       issuer: JWT_ISSUER,
     });
 
+    // Check token revocation blocklist
+    const jti = payload.jti ?? (payload.sub as string) + ':' + String(payload.iat);
+    if (isTokenRevoked(jti)) {
+      return null;
+    }
+
     return {
       id: payload.sub as string,
       email: payload.email as string,
@@ -156,11 +182,6 @@ export async function getSession(token: string): Promise<SessionUser | null> {
     return null;
   }
 }
-
-// Note: JWT tokens can't be individually invalidated without a blocklist.
-// For logout, we clear the cookie. For password changes, the token's
-// short TTL (8h) limits exposure. For production, add a Redis-based
-// token blocklist for immediate invalidation.
 
 /**
  * Extract session from request cookie.
@@ -215,14 +236,8 @@ export function withAuth(
         ? await requireAuthWithPermission(request, permission)
         : await requireAuth(request);
 
-      // Set firm context for RLS enforcement
-      await setFirmContext(user.firmId);
-
-      try {
-        return await handler(user, request);
-      } finally {
-        await clearFirmContext();
-      }
+      // Set firm context for RLS enforcement (auto-scoped, auto-cleared)
+      return runWithFirmContext(user.firmId, () => handler(user, request));
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         return Response.json(

@@ -49,10 +49,15 @@ export const GET = withAuth('view_all', async (user, request) => {
     };
     const contentType = contentTypes[ext] || 'application/octet-stream';
 
+    // Encode filename safely and use attachment to prevent browser execution
+    const rawFilename = filePath.split('/').pop() || 'download';
+    const safeFilename = encodeURIComponent(rawFilename);
+
     return new Response(fileBuffer, {
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `inline; filename="${filePath.split('/').pop()}"`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${safeFilename}`,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'private, max-age=3600',
       },
     });

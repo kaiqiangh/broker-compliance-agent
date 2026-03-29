@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, runWithFirmContext } from '@/lib/prisma';
 import { NotificationService } from '@/services/notification-service';
 import { RenewalService } from '@/services/renewal-service';
 
@@ -29,9 +29,32 @@ function requireWorkerAuth(request: Request): Response | null {
     return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
   }
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${workerSecret}`) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const token = authHeader.slice(7);
+
+  // Timing-safe comparison to prevent timing attacks
+  const crypto = require('crypto') as typeof import('crypto');
+  const expected = Buffer.from(workerSecret, 'utf-8');
+  const received = Buffer.from(token, 'utf-8');
+
+  // If lengths differ, still do a constant-time check using a padded comparison
+  if (expected.length !== received.length) {
+    // Compare with a dummy buffer of equal length to maintain constant time
+    const maxLen = Math.max(expected.length, received.length);
+    const paddedExpected = Buffer.alloc(maxLen, 0);
+    const paddedReceived = Buffer.alloc(maxLen, 0);
+    expected.copy(paddedExpected);
+    received.copy(paddedReceived);
+    crypto.timingSafeEqual(paddedExpected, paddedReceived); // always false for wrong length
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!crypto.timingSafeEqual(expected, received)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   return null;
 }
 
@@ -69,9 +92,7 @@ export async function POST(request: Request) {
           const firms = await prisma.firm.findMany({ select: { id: true } });
           let total = 0;
           for (const firm of firms) {
-            // Set firm context for RLS
-            await prisma.$executeRaw`SELECT set_current_firm_id(${firm.id})`;
-            const count = await renewalService.generateRenewals(firm.id);
+            const count = await runWithFirmContext(firm.id, () => renewalService.generateRenewals(firm.id));
             total += count;
           }
           results.push({ jobId: job.id, type: job.jobType, status: 'completed' });
@@ -84,10 +105,11 @@ export async function POST(request: Request) {
           let totalDeleted = 0;
           const allFirms = await prisma.firm.findMany({ select: { id: true } });
           for (const firm of allFirms) {
-            await prisma.$executeRaw`SELECT set_current_firm_id(${firm.id})`;
-            const batch = await prisma.auditEvent.deleteMany({
-              where: { firmId: firm.id, timestamp: { lt: cutoff } },
-            });
+            const batch = await runWithFirmContext(firm.id, () =>
+              prisma.auditEvent.deleteMany({
+                where: { firmId: firm.id, timestamp: { lt: cutoff } },
+              })
+            );
             totalDeleted += batch.count;
           }
           results.push({ jobId: job.id, type: job.jobType, status: 'completed' });
@@ -128,8 +150,9 @@ export async function POST(request: Request) {
 
   let remindersScheduled = 0;
   for (const firm of reminderFirms) {
-    await prisma.$executeRaw`SELECT set_current_firm_id(${firm.id})`;
-    remindersScheduled += await notificationService.checkAndScheduleReminders();
+    remindersScheduled += await runWithFirmContext(firm.id, () =>
+      notificationService.checkAndScheduleReminders()
+    );
   }
 
   return NextResponse.json({
