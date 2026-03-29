@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { ImportService } from '@/services/import-service';
+import { parse as csvParse } from 'csv-parse/sync';
 
 const importService = new ImportService();
 
@@ -38,13 +39,24 @@ export const PUT = withAuth('import', async (user, request) => {
   const rawBuffer = Buffer.from(fileBuffer, 'base64');
   const raw = rawBuffer.toString('utf-8');
 
-  // Parse the raw CSV to get headers and rows
-  const lines = raw.split('\n').filter(l => l.trim());
-  if (lines.length < 2) {
+  // Parse the raw CSV using csv-parse to handle quoted fields properly
+  let records: Record<string, string>[];
+  try {
+    records = csvParse(raw, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      bom: true,
+    });
+  } catch {
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid CSV format' } }, { status: 400 });
+  }
+
+  if (records.length === 0) {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'CSV must have header + at least one data row' } }, { status: 400 });
   }
 
-  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const rawHeaders = Object.keys(records[0]);
 
   // Target headers in canonical order
   const targetHeaders = [
@@ -66,13 +78,13 @@ export const PUT = withAuth('import', async (user, request) => {
     }
   }
 
-  // Transform each row
+  // Transform each row using parsed records
   const transformedRows = [targetHeaders.join(',')];
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+  for (const record of records) {
+    const sourceValues = rawHeaders.map(h => record[h] || '');
     const newRow = new Array(targetHeaders.length).fill('');
     for (const [srcIdx, tgtIdx] of Object.entries(sourceToTarget)) {
-      newRow[tgtIdx] = values[parseInt(srcIdx)] || '';
+      newRow[tgtIdx] = sourceValues[parseInt(srcIdx)] || '';
     }
     transformedRows.push(newRow.join(','));
   }

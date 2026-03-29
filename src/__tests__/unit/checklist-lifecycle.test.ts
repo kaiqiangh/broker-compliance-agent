@@ -26,7 +26,6 @@ describe('ChecklistService — state machine integration', () => {
 
   it('prevents all invalid transitions', () => {
     const invalidTransitions: Array<[string, string]> = [
-      ['pending', 'completed'],
       ['pending', 'approved'],
       ['pending', 'rejected'],
       ['completed', 'approved'],

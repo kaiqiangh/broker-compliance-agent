@@ -301,6 +301,8 @@ export class DocumentService {
         adviserName: renewal.policy.adviser?.name || 'Adviser',
         expiryDate: renewal.policy.expiryDate.toISOString(),
       });
+    } else {
+      throw new Error(`Unknown document type: ${documentType}`);
     }
 
     // Store document record

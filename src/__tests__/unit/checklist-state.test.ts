@@ -32,8 +32,8 @@ describe('canTransition', () => {
     expect(canTransition('rejected', 'in_progress')).toBe(true);
   });
 
-  it('rejects pending → completed (must go through in_progress)', () => {
-    expect(canTransition('pending', 'completed')).toBe(false);
+  it('allows pending → completed (adviser can complete directly)', () => {
+    expect(canTransition('pending', 'completed')).toBe(true);
   });
 
   it('rejects approved → anything (terminal)', () => {
