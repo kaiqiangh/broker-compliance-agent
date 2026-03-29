@@ -57,8 +57,8 @@ export default function ImportPage() {
       analysisForm.append('file', file);
 
       const [previewRes, mappingRes] = await Promise.all([
-        fetch('/api/import', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('file', file); return fd; })() }),
-        fetch('/api/import/mapping', { method: 'POST', body: analysisForm }),
+        apiFetch('/api/import', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('file', file); return fd; })() }),
+        apiFetch('/api/import/mapping', { method: 'POST', body: analysisForm }),
       ]);
 
       const previewData = await previewRes.json();
