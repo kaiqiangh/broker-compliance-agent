@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createResetToken } from '@/lib/reset-token-store';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { EmailService } from '@/services/email-service';
 import { z } from 'zod';
 
@@ -15,13 +16,33 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email } = ForgotPasswordSchema.parse(body);
 
+    // Rate limit by IP: 3 requests per minute
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded?.split(',')[0]?.trim() || 'unknown';
+    const ipLimit = await checkRateLimit(`forgot-password:ip:${ip}`, 3, 60_000);
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again later.' } },
+        { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfter || 60) } }
+      );
+    }
+
+    // Rate limit by email: 3 requests per hour
+    const emailLimit = await checkRateLimit(`forgot-password:email:${email.toLowerCase()}`, 3, 3_600_000);
+    if (!emailLimit.allowed) {
+      return NextResponse.json(
+        { error: { code: 'RATE_LIMITED', message: 'Too many requests for this email. Try again later.' } },
+        { status: 429, headers: { 'Retry-After': String(emailLimit.retryAfter || 3600) } }
+      );
+    }
+
     // Always return success to prevent user enumeration
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
     if (user) {
-      const token = createResetToken(user.id);
+      const token = await createResetToken(user.id);
       const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
