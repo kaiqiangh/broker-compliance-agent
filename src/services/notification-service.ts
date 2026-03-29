@@ -12,7 +12,7 @@ interface ReminderConfig {
 
 const REMINDER_CONFIGS: ReminderConfig[] = [
   { type: '40_day', daysBeforeExpiry: 40, recipientRoles: ['compliance_officer'] },
-  { type: '20_day', daysBeforeExpiry: 20, recipientRoles: ['compliance_officer', 'firm_admin'] },
+  { type: '20_day', daysBeforeExpiry: 20, recipientRoles: ['compliance_officer', 'adviser'] },
   { type: '7_day', daysBeforeExpiry: 7, recipientRoles: ['firm_admin', 'compliance_officer', 'adviser'] },
   { type: '1_day', daysBeforeExpiry: 1, recipientRoles: ['firm_admin'] },
   { type: 'overdue', daysBeforeExpiry: 0, recipientRoles: ['firm_admin', 'compliance_officer'] },
