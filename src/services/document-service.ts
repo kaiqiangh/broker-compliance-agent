@@ -250,7 +250,8 @@ export class DocumentService {
     firmId: string,
     renewalId: string,
     documentType: string,
-    generatedBy: string
+    generatedBy: string,
+    cpcVersion: '2012' | 'cp158' = '2012'
   ): Promise<{ id: string; html: string }> {
     // Load renewal data
     const renewal = await prisma.renewal.findFirst({
@@ -286,7 +287,7 @@ export class DocumentService {
         firmAddress: '',
         adviserName: renewal.policy.adviser?.name || 'Adviser',
         commissionRate: renewal.policy.commissionRate ? Number(renewal.policy.commissionRate) : 12.5,
-        cpcVersion: '2012',
+        cpcVersion,
       });
     } else if (documentType === 'suitability_assessment') {
       html = this.generateSuitabilityAssessment({

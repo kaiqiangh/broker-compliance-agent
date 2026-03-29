@@ -2,18 +2,21 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
-import { parseCSV } from '@/lib/csv-parser';
 import { ImportService } from '@/services/import-service';
 
 const importService = new ImportService();
 
 /**
- * PUT /api/import/mapping
+ * PUT /api/import/confirm
  *
- * Confirm import with custom field mappings.
+ * Import with custom field mappings. Transforms CSV using the user-provided
+ * column mapping, then imports the transformed data.
  *
- * Body: { fileName: string, mappings: Record<string, string>, buffer: base64 }
- * The mappings map target field names to source CSV column names.
+ * Body: {
+ *   fileName: string,
+ *   mappings: Record<string, string>,  // targetField → sourceColumnName
+ *   fileBuffer: string (base64)
+ * }
  */
 export const PUT = withAuth('import', async (user, request) => {
   const body = await request.json();
@@ -23,14 +26,54 @@ export const PUT = withAuth('import', async (user, request) => {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'fileBuffer and mappings required' } }, { status: 400 });
   }
 
-  // The import service handles the actual import
-  // For custom mappings, we'd need to transform the CSV first
-  // For now, delegate to the standard import with override format
-  const buffer = Buffer.from(fileBuffer, 'base64');
+  const rawBuffer = Buffer.from(fileBuffer, 'base64');
+  const raw = rawBuffer.toString('utf-8');
+
+  // Parse the raw CSV to get headers and rows
+  const lines = raw.split('\n').filter(l => l.trim());
+  if (lines.length < 2) {
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'CSV must have header + at least one data row' } }, { status: 400 });
+  }
+
+  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+
+  // Target headers in canonical order
+  const targetHeaders = [
+    'PolicyRef', 'ClientName', 'ClientAddress', 'PolicyType',
+    'InsurerName', 'InceptionDate', 'ExpiryDate', 'Premium',
+    'Commission', 'NCB', 'VehicleReg', 'CoverType', 'Status',
+  ];
+
+  // Build column index map: source column index → target column index
+  const sourceToTarget: Record<number, number> = {};
+  for (const [targetField, sourceCol] of Object.entries(mappings as Record<string, string>)) {
+    const sourceIdx = rawHeaders.findIndex(h => h === sourceCol);
+    const targetIdx = targetHeaders.findIndex(h =>
+      h.toLowerCase() === targetField ||
+      h.toLowerCase() === targetField.toLowerCase()
+    );
+    if (sourceIdx >= 0 && targetIdx >= 0) {
+      sourceToTarget[sourceIdx] = targetIdx;
+    }
+  }
+
+  // Transform each row
+  const transformedRows = [targetHeaders.join(',')];
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+    const newRow = new Array(targetHeaders.length).fill('');
+    for (const [srcIdx, tgtIdx] of Object.entries(sourceToTarget)) {
+      newRow[tgtIdx] = values[parseInt(srcIdx)] || '';
+    }
+    transformedRows.push(newRow.join(','));
+  }
+
+  const transformedCsv = transformedRows.join('\n');
+  const transformedBuffer = Buffer.from(transformedCsv, 'utf-8');
 
   const result = await importService.import(
     user.firmId,
-    buffer,
+    transformedBuffer,
     user.id,
     fileName || 'custom-mapping.csv',
   );
@@ -38,6 +81,7 @@ export const PUT = withAuth('import', async (user, request) => {
   return NextResponse.json({
     importId: result.importId,
     format: 'custom_mapping',
+    mappingsApplied: Object.keys(mappings).length,
     rowCount: result.importedRows,
     errorCount: result.errorRows,
     skippedRows: result.skippedRows,

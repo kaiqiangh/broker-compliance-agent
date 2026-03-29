@@ -153,7 +153,31 @@ export const DELETE = withAuth('admin', async (user, request) => {
     `;
   }
 
-  // 3. Audit the erasure itself
+  // 4. Redact PII from checklist items (free-text fields that may contain client references)
+  const clientRenewals = await prisma.renewal.findMany({
+    where: { firmId: user.firmId, policy: { clientId } },
+    select: { id: true },
+  });
+  const renewalIds = clientRenewals.map(r => r.id);
+
+  if (renewalIds.length > 0) {
+    await prisma.checklistItem.updateMany({
+      where: {
+        firmId: user.firmId,
+        renewalId: { in: renewalIds },
+        OR: [
+          { notes: { not: null } },
+          { rejectionReason: { not: null } },
+        ],
+      },
+      data: {
+        notes: '[REDACTED — GDPR erasure]',
+        rejectionReason: '[REDACTED — GDPR erasure]',
+      },
+    });
+  }
+
+  // 5. Audit the erasure itself
   await prisma.auditEvent.create({
     data: {
       firmId: user.firmId,

@@ -7,6 +7,28 @@ import { z } from 'zod';
 
 const checklistService = new ChecklistService();
 
+/**
+ * Handle checklist action with optimistic locking support.
+ * If another user modified the item concurrently, returns 409 Conflict.
+ */
+async function handleAction(
+  action: () => Promise<unknown>
+): Promise<Response> {
+  try {
+    const result = await action();
+    return NextResponse.json({ data: result });
+  } catch (err) {
+    // Prisma P2025: Record not found — likely optimistic lock failure
+    if ((err as any).code === 'P2025') {
+      return NextResponse.json(
+        { error: { code: 'CONFLICT', message: 'This item was modified by another user. Please refresh and try again.' } },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
+}
+
 const CompleteSchema = z.object({
   evidenceUrl: z.string().url().optional(),
   notes: z.string().optional(),
@@ -43,39 +65,36 @@ export async function PUT(
   if (action === 'complete') {
     return withAuth('complete_items', async (user) => {
       const { evidenceUrl, notes } = CompleteSchema.parse(body);
-      const result = await checklistService.completeItem(
+      return handleAction(() => checklistService.completeItem(
         user.firmId,
         params.id,
         user.id,
         { url: evidenceUrl, notes }
-      );
-      return NextResponse.json({ data: result });
+      ));
     })(request);
   }
 
   if (action === 'approve') {
     return withAuth('sign_off', async (user) => {
       const { comment } = ApproveSchema.parse(body);
-      const result = await checklistService.approveItem(
+      return handleAction(() => checklistService.approveItem(
         user.firmId,
         params.id,
         user.id,
         comment
-      );
-      return NextResponse.json({ data: result });
+      ));
     })(request);
   }
 
   if (action === 'reject') {
     return withAuth('sign_off', async (user) => {
       const { reason } = RejectSchema.parse(body);
-      const result = await checklistService.rejectItem(
+      return handleAction(() => checklistService.rejectItem(
         user.firmId,
         params.id,
         user.id,
         reason
-      );
-      return NextResponse.json({ data: result });
+      ));
     })(request);
   }
 

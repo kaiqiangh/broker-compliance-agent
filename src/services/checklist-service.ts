@@ -29,7 +29,7 @@ export class ChecklistService {
     }
 
     const updated = await prisma.checklistItem.update({
-      where: { id: itemId },
+      where: { id: itemId, status: item.status }, // optimistic lock: only update if status hasn't changed
       data: {
         status: targetStatus,
         completedBy,
@@ -77,7 +77,7 @@ export class ChecklistService {
     }
 
     const updated = await prisma.checklistItem.update({
-      where: { id: itemId },
+      where: { id: itemId, status: item.status }, // optimistic lock
       data: {
         status: 'approved',
         approvedBy,
@@ -126,7 +126,7 @@ export class ChecklistService {
     }
 
     const updated = await prisma.checklistItem.update({
-      where: { id: itemId },
+      where: { id: itemId, status: item.status }, // optimistic lock
       data: {
         status: 'rejected',
         rejectionReason: reason,

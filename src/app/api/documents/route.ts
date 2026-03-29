@@ -12,7 +12,7 @@ const inspectionPackService = new InspectionPackService();
 
 export const POST = withAuth('complete_items', async (user, request) => {
   const body = await request.json();
-  const { renewalId, documentType, format } = body;
+  const { renewalId, documentType, format, cpcVersion } = body;
 
   if (!renewalId || !documentType) {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'renewalId and documentType required' } }, { status: 400 });
@@ -39,7 +39,8 @@ export const POST = withAuth('complete_items', async (user, request) => {
       user.firmId,
       renewalId,
       documentType,
-      user.id
+      user.id,
+      cpcVersion || '2012'
     );
 
     // PDF output
