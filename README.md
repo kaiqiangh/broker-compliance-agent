@@ -327,25 +327,27 @@ npm run test:coverage
 
 ## Project Status
 
-**Phase 1 (CPC Renewal Compliance): ~87% complete**
+**Phase 1 (CPC Renewal Compliance): Complete**
 
 | Area | Status |
 |------|--------|
-| Data Import | ✅ Complete (CSV/Applied Epic/Acturis + mapping + fuzzy dedup) |
+| Data Import | ✅ Complete (CSV/Applied Epic/Acturis + mapping + fuzzy dedup + CSV injection protection) |
 | Dashboard | ✅ Complete (pie chart, activity feed, countdown bar, quarterly score) |
-| Checklist Engine | ✅ Complete (8 items, sign-off, evidence, state machine) |
-| Document Generator | ✅ Complete (renewal letter, suitability, commission, inspection pack) |
-| Audit Trail | ✅ Complete (12+ events, paginated, CSV export) |
-| Auth & RBAC | ✅ Complete (JWT, 4 roles, CSRF, rate limit, password reset) |
-| GDPR | ✅ Complete (export, erasure, retention purge) |
-| Background Worker | ✅ Complete (DB job queue, retry, catch-up) |
-| Clients Management | ✅ Complete (list, detail, search) |
+| Checklist Engine | ✅ Complete (8 items, sign-off, evidence, state machine, self-approval prevention) |
+| Document Generator | ✅ Complete (renewal letter, suitability, commission, async inspection pack) |
+| Audit Trail | ✅ Complete (15+ events, paginated, CSV export, PII redaction) |
+| Auth & RBAC | ✅ Complete (JWT, 4 roles, CSRF, Redis-backed rate limit, password reset, session revocation) |
+| GDPR | ✅ Complete (export, erasure via worker, retention purge, Art 17(3)(b)) |
+| Background Worker | ✅ Complete (DB job queue, retry, catch-up, inspection pack generation) |
+| Clients Management | ✅ Complete (list, detail, search, cascade delete) |
 | Settings | ✅ Complete (user profile, firm info, team members) |
-| CPC Rules DB | ⚠️ Code constants (ADR-004: admin UI pending) |
-| S3/R2 Storage | ⚠️ Local filesystem (production needs cloud storage) |
-| E2E Tests | ❌ Unit tests only (no Playwright) |
-| DPIA Documentation | ❌ Pending |
-| Subscription Handling | ❌ Not implemented |
+| CPC Rules DB | ✅ Complete (ADR-004: DB-configurable rules, admin API, auto-seed) |
+| Cloud Storage | ✅ Complete (S3/R2 support with local filesystem fallback) |
+| Unit Tests | ✅ 301 tests, 24 test files |
+| E2E Tests | ✅ 19 Playwright tests, 5 spec files |
+| Security | ✅ 0 npm vulnerabilities, all deps at latest |
+| DPIA Documentation | ❌ Pending (legal document, not code) |
+| Subscription Handling | ❌ Phase 2 |
 
 ## Design Documents
 
