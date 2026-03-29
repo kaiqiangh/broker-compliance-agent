@@ -77,6 +77,7 @@ export class RenewalService {
     status?: string;
     policyType?: string;
     daysAhead?: number;
+    adviserId?: string;
   }) {
     const daysAhead = options?.daysAhead || 90;
     const futureDate = new Date();
@@ -88,6 +89,7 @@ export class RenewalService {
         dueDate: { lte: futureDate },
         ...(options?.status ? { status: options.status } : {}),
         ...(options?.policyType ? { policy: { policyType: options.policyType } } : {}),
+        ...(options?.adviserId ? { policy: { adviserId: options.adviserId } } : {}),
       },
       include: {
         policy: {

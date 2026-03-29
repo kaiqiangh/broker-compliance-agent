@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
+import { hasPermission } from '@/lib/rbac';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -12,7 +13,12 @@ const CreateClientSchema = z.object({
   address: z.string().max(2000).optional().or(z.literal('')),
 });
 
-export const GET = withAuth('view_all', async (user, request) => {
+export const GET = withAuth(null, async (user, request) => {
+  // Advisers see only their own clients; everyone else needs view_all
+  if (!hasPermission(user.role, 'view_all') && !hasPermission(user.role, 'view_own')) {
+    return Response.json({ error: { code: 'FORBIDDEN', message: 'Requires permission: view_all or view_own' } }, { status: 403 });
+  }
+
   const url = new URL(request.url);
   const search = url.searchParams.get('q') || '';
 
@@ -20,6 +26,9 @@ export const GET = withAuth('view_all', async (user, request) => {
     where: {
       firmId: user.firmId,
       ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+      ...(hasPermission(user.role, 'view_own') && !hasPermission(user.role, 'view_all')
+        ? { policies: { some: { adviserId: user.id } } }
+        : {}),
     },
     include: {
       _count: { select: { policies: true } },

@@ -20,11 +20,13 @@ export default function AuditPage() {
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
+  const [totalPages, setTotalPages] = useState(1);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ limit: String(pageSize), offset: String(page * pageSize) });
+        const params = new URLSearchParams({ page: String(page + 1), pageSize: String(pageSize) });
         if (actionFilter) params.set('action', actionFilter);
 
         const res = await fetch(`/api/audit?${params}`);
@@ -32,6 +34,7 @@ export default function AuditPage() {
         const data = await res.json();
         setEvents(data.data);
         setTotal(data.meta.total);
+        setTotalPages(data.meta.totalPages);
       } catch (err) {
         console.error(err);
       } finally {
@@ -140,9 +143,32 @@ export default function AuditPage() {
             >
               Previous
             </button>
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 7) {
+                pageNum = i;
+              } else if (page < 3) {
+                pageNum = i;
+              } else if (page > totalPages - 4) {
+                pageNum = totalPages - 7 + i;
+              } else {
+                pageNum = page - 3 + i;
+              }
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`px-3 py-1.5 border rounded text-sm ${
+                    page === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {pageNum + 1}
+                </button>
+              );
+            })}
             <button
               onClick={() => setPage(p => p + 1)}
-              disabled={(page + 1) * pageSize >= total}
+              disabled={page + 1 >= totalPages}
               className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50"
             >
               Next
