@@ -45,16 +45,6 @@ export class ImportService {
     let skippedCount = 0;
     let needsReviewCount = 0;
 
-    // Pre-fetch existing policies for this firm to avoid N+1 queries
-    const dedupHashes = parsed.policies.map(p => computeDedupHash({
-      firmId,
-      policyNumber: p.policyNumber,
-      policyType: p.policyType,
-      insurerName: p.insurerName,
-      inceptionDate: p.inceptionDate,
-    }));
-    const normalizedNumbers = parsed.policies.map(p => normalizePolicyNumber(p.policyNumber));
-
     const existingPolicies = await prisma.policy.findMany({
       where: { firmId },
     });
@@ -66,6 +56,19 @@ export class ImportService {
         .filter(p => p.policyNumberNormalized)
         .map(p => [p.policyNumberNormalized!, p])
     );
+
+    // Build a pre-filtered index for Tier 3 fuzzy match: key = "policyType|insurerName" (lowercased)
+    const byTypeAndInsurer = new Map<string, typeof existingPolicies>();
+    for (const p of existingPolicies) {
+      if (!p.policyNumberNormalized) continue;
+      const key = `${p.policyType}|${p.insurerName.toLowerCase()}`;
+      const arr = byTypeAndInsurer.get(key);
+      if (arr) {
+        arr.push(p);
+      } else {
+        byTypeAndInsurer.set(key, [p]);
+      }
+    }
 
     // Pre-fetch existing clients
     const clientNames = [...new Set(parsed.policies.map(p => p.clientName))];
@@ -132,12 +135,11 @@ export class ImportService {
 
         // Tier 3: fuzzy match — same insurer + same type + similar policy number
         let fuzzyHit: { policy: typeof existingPolicies[number]; result: FuzzyMatchResult } | null = null;
-        for (const existingPolicy of existingPolicies) {
-          if (!existingPolicy.policyNumberNormalized) continue;
-          if (existingPolicy.policyType !== policy.policyType) continue;
-          if (existingPolicy.insurerName.toLowerCase() !== policy.insurerName.toLowerCase()) continue;
-
-          const fm = fuzzyMatchPolicy(normalizedNumber, existingPolicy.policyNumberNormalized);
+        const fuzzyCandidates = byTypeAndInsurer.get(
+          `${policy.policyType}|${policy.insurerName.toLowerCase()}`
+        ) || [];
+        for (const existingPolicy of fuzzyCandidates) {
+          const fm = fuzzyMatchPolicy(normalizedNumber, existingPolicy.policyNumberNormalized!);
           if (fm.matched) {
             if (!fuzzyHit || fm.confidence > fuzzyHit.result.confidence) {
               fuzzyHit = { policy: existingPolicy, result: fm };
