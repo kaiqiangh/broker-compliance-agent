@@ -264,7 +264,7 @@ export function withAuth(
           { status: 403 }
         );
       }
-      console.error('API error:', err);
+      console.warn('API error [redacted]:', err instanceof Error ? err.message : 'unknown');
       return Response.json(
         { error: { code: 'INTERNAL', message: 'Internal server error' } },
         { status: 500 }

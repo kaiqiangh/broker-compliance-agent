@@ -77,7 +77,7 @@ export const POST = withAuth(null, async (user, request) => {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid input' } }, { status: 400 });
     }
-    console.error('Password change error:', err);
+    console.warn('Password change error [redacted]:', err instanceof Error ? err.message : 'unknown');
     return NextResponse.json({ error: { code: 'INTERNAL', message: 'Internal server error' } }, { status: 500 });
   }
 });

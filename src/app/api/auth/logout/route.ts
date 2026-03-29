@@ -17,5 +17,13 @@ export async function POST(_request: Request) {
     maxAge: 0,
     path: '/',
   });
+  // Also clear CSRF token cookie
+  response.cookies.set('csrf_token', '', {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 0,
+    path: '/',
+  });
   return response;
 }
