@@ -1,15 +1,21 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { deleteSession, getUserFromRequest } from '@/lib/auth';
 
-export async function POST(request: Request) {
-  const token = request.headers.get('cookie')?.match(/session=([^;]+)/)?.[1];
-  if (token) {
-    deleteSession(token);
-  }
-
+/**
+ * Logout — clear the session cookie.
+ * JWT tokens are stateless so there's no server-side session to delete.
+ * The token will expire naturally within 8 hours.
+ * For immediate invalidation in production, implement a token blocklist.
+ */
+export async function POST(_request: Request) {
   const response = NextResponse.json({ success: true });
-  response.cookies.set('session', '', { maxAge: 0, path: '/' });
+  response.cookies.set('session', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 0,
+    path: '/',
+  });
   return response;
 }

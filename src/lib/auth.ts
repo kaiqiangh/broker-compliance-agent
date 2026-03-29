@@ -1,4 +1,5 @@
 import { hash, compare } from 'bcryptjs';
+import { SignJWT, jwtVerify } from 'jose';
 import { prisma } from './prisma';
 import { hasPermission, UnauthorizedError, ForbiddenError } from './rbac';
 import type { Permission, Role } from './rbac';
@@ -12,6 +13,14 @@ export interface SessionUser {
   role: Role;
   firmId: string;
 }
+
+// ─── JWT config ──────────────────────────────────────────────
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXTAUTH_SECRET || 'local-dev-secret-change-in-production'
+);
+const JWT_ISSUER = 'broker-comply';
+const SESSION_TTL = '8h';
 
 // ─── Auth helpers ────────────────────────────────────────────
 
@@ -100,63 +109,63 @@ export async function registerFirm(params: {
   return { firmId: firm.id, user };
 }
 
-// ─── API route auth middleware ───────────────────────────────
+// ─── JWT session management ─────────────────────────────────
 
 /**
- * In-memory session store for MVP (replace with NextAuth/JWT in production).
- * Maps session token → user info.
+ * Create a signed JWT session token.
+ * Stateless — no server-side session store needed.
+ * Survives restarts, works across multiple instances.
  */
-const sessions = new Map<string, { user: SessionUser; expiresAt: number }>();
-
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
-
-export function createSession(user: SessionUser): string {
-  const token = crypto.randomUUID();
-  sessions.set(token, { user, expiresAt: Date.now() + SESSION_TTL_MS });
-  return token;
+export async function createSession(user: SessionUser): Promise<string> {
+  return new SignJWT({
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    firmId: user.firmId,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuer(JWT_ISSUER)
+    .setIssuedAt()
+    .setExpirationTime(SESSION_TTL)
+    .sign(JWT_SECRET);
 }
 
-export function getSession(token: string): SessionUser | null {
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (Date.now() > session.expiresAt) {
-    sessions.delete(token);
+/**
+ * Verify and decode a JWT session token.
+ * Returns the session user or null if invalid/expired.
+ */
+export async function getSession(token: string): Promise<SessionUser | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, {
+      issuer: JWT_ISSUER,
+    });
+
+    return {
+      id: payload.sub as string,
+      email: payload.email as string,
+      name: payload.name as string,
+      role: payload.role as Role,
+      firmId: payload.firmId as string,
+    };
+  } catch {
     return null;
   }
-  // Sliding window: refresh expiry on access
-  session.expiresAt = Date.now() + SESSION_TTL_MS;
-  return session.user;
 }
 
-export function deleteSession(token: string): void {
-  sessions.delete(token);
-}
-
-// Periodic cleanup of expired sessions (every 5 minutes)
-// Guard against multiple intervals in dev HMR
-const globalForSessions = globalThis as unknown as {
-  _sessionCleanup: ReturnType<typeof setInterval> | undefined;
-};
-
-if (!globalForSessions._sessionCleanup) {
-  globalForSessions._sessionCleanup = setInterval(() => {
-    const now = Date.now();
-    for (const [token, session] of sessions) {
-      if (now > session.expiresAt) {
-        sessions.delete(token);
-      }
-    }
-  }, 5 * 60 * 1000);
-}
+// Note: JWT tokens can't be individually invalidated without a blocklist.
+// For logout, we clear the cookie. For password changes, the token's
+// short TTL (8h) limits exposure. For production, add a Redis-based
+// token blocklist for immediate invalidation.
 
 /**
  * Extract session from request cookie.
  */
-export function getUserFromRequest(request: Request): SessionUser | null {
+export async function getUserFromRequest(request: Request): Promise<SessionUser | null> {
   const cookieHeader = request.headers.get('cookie');
   if (!cookieHeader) return null;
 
-  // Parse cookies manually to handle URL encoding
+  // Parse cookies manually
   const cookies = cookieHeader.split(';').reduce((acc, part) => {
     const [key, ...valueParts] = part.trim().split('=');
     if (key) acc[key.trim()] = decodeURIComponent(valueParts.join('='));
@@ -172,8 +181,8 @@ export function getUserFromRequest(request: Request): SessionUser | null {
 /**
  * Require authenticated user or throw 401.
  */
-export function requireAuth(request: Request): SessionUser {
-  const user = getUserFromRequest(request);
+export async function requireAuth(request: Request): Promise<SessionUser> {
+  const user = await getUserFromRequest(request);
   if (!user) throw new UnauthorizedError('Not authenticated');
   return user;
 }
@@ -181,8 +190,8 @@ export function requireAuth(request: Request): SessionUser {
 /**
  * Require authenticated user with specific permission or throw 403.
  */
-export function requireAuthWithPermission(request: Request, permission: Permission): SessionUser {
-  const user = requireAuth(request);
+export async function requireAuthWithPermission(request: Request, permission: Permission): Promise<SessionUser> {
+  const user = await requireAuth(request);
   if (!hasPermission(user.role, permission)) {
     throw new ForbiddenError(`Requires permission: ${permission}`);
   }
@@ -199,8 +208,8 @@ export function withAuth(
   return async (request: Request): Promise<Response> => {
     try {
       const user = permission
-        ? requireAuthWithPermission(request, permission)
-        : requireAuth(request);
+        ? await requireAuthWithPermission(request, permission)
+        : await requireAuth(request);
       return await handler(user, request);
     } catch (err) {
       if (err instanceof UnauthorizedError) {

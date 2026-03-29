@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     // Successful login — clear rate limit for this IP
     clearRateLimit(ip);
 
-    const token = createSession(user);
+    const token = await createSession(user);
 
     const response = NextResponse.json({
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
