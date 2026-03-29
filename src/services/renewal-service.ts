@@ -35,13 +35,19 @@ export class RenewalService {
 
       // Materialize checklist items
       for (const itemDef of CHECKLIST_DEFINITIONS) {
+        const isAutoComplete = itemDef.type === 'premium_disclosure';
+
         await prisma.checklistItem.create({
           data: {
             firmId,
             renewalId: renewal.id,
             itemType: itemDef.type,
-            status: 'pending',
+            status: isAutoComplete ? 'completed' : 'pending',
             assignedTo: policy.adviserId || null,
+            completedBy: isAutoComplete ? null : undefined,
+            completedAt: isAutoComplete ? new Date() : undefined,
+            evidenceUrl: isAutoComplete ? 'system:premium_data' : undefined,
+            notes: isAutoComplete ? 'Auto-populated from policy data' : undefined,
           },
         });
       }

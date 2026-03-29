@@ -21,6 +21,24 @@ export const POST = withAuth('complete_items', async (user, request) => {
   try {
     // Inspection pack — generates ZIP with multiple documents
     if (documentType === 'inspection_pack') {
+      // Support filtered packs via body params
+      const { dateFrom, dateTo, policyType, adviserId } = body;
+      const hasFilters = dateFrom || dateTo || policyType || adviserId;
+
+      if (hasFilters) {
+        const pack = await inspectionPackService.generateFilteredPack(
+          user.firmId,
+          { dateFrom, dateTo, policyType, adviserId },
+          user.id
+        );
+        return new Response(new Uint8Array(pack.buffer), {
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${pack.fileName}"`,
+          },
+        });
+      }
+
       const pack = await inspectionPackService.generatePack(
         user.firmId,
         renewalId,
