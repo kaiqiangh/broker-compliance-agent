@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { readFile } from 'fs/promises';
 import { resolve, sep } from 'path';
+import { prisma } from '@/lib/prisma';
 
 const UPLOADS_ROOT = resolve(process.cwd(), 'uploads');
 
@@ -36,6 +37,21 @@ export const GET = withAuth('view_all', async (user, request) => {
   try {
     const fileBuffer = await readFile(fullPath);
 
+    // Encode filename safely
+    const rawFilename = filePath.split('/').pop() || 'download';
+
+    // Log document download audit event
+    await prisma.auditEvent.create({
+      data: {
+        firmId: user.firmId,
+        actorId: user.id,
+        action: 'document.downloaded',
+        entityType: 'document',
+        entityId: filePath,
+        metadata: { fileName: rawFilename },
+      },
+    });
+
     // Determine content type from extension
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
     const contentTypes: Record<string, string> = {
@@ -49,8 +65,7 @@ export const GET = withAuth('view_all', async (user, request) => {
     };
     const contentType = contentTypes[ext] || 'application/octet-stream';
 
-    // Encode filename safely and use attachment to prevent browser execution
-    const rawFilename = filePath.split('/').pop() || 'download';
+    // Use attachment to prevent browser execution
     const safeFilename = encodeURIComponent(rawFilename);
 
     return new Response(fileBuffer, {
