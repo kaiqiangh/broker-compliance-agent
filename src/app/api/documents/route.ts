@@ -61,8 +61,9 @@ export const POST = withAuth('complete_items', async (user, request) => {
       },
     });
   } catch (err) {
+    console.error('Document generation error:', err);
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: { code: 'GENERATION_FAILED', message: 'Failed to generate document' } },
       { status: 400 }
     );
   }

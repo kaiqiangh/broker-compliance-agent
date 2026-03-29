@@ -12,21 +12,32 @@ const renewalService = new RenewalService();
  * Worker job processor endpoint.
  *
  * Processes pending jobs from the scheduled_jobs table.
+ * Requires WORKER_SECRET for authentication.
+ *
  * Can be triggered by:
  * - Cron job (external scheduler)
  * - Manual trigger via POST
- * - Vercel Cron (GET with secret)
+ * - Health check via GET
  *
  * Jobs are processed in order of scheduled_for time.
  * Failed jobs are retried up to max_attempts.
  */
-export async function POST(request: Request) {
-  // Simple auth check for worker trigger
-  const authHeader = request.headers.get('authorization');
+
+function requireWorkerAuth(request: Request): Response | null {
   const workerSecret = process.env.WORKER_SECRET;
-  if (workerSecret && authHeader !== `Bearer ${workerSecret}`) {
+  if (!workerSecret) {
+    return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
+  }
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== `Bearer ${workerSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  return null;
+}
+
+export async function POST(request: Request) {
+  const authError = requireWorkerAuth(request);
+  if (authError) return authError;
 
   const results: Array<{ jobId: string; type: string; status: string; error?: string }> = [];
 
@@ -116,7 +127,9 @@ export async function POST(request: Request) {
 /**
  * Health check / status for worker.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const authError = requireWorkerAuth(request);
+  if (authError) return authError;
   const [pendingJobs, failedJobs, lastRun] = await Promise.all([
     prisma.scheduledJob.count({ where: { status: 'pending' } }),
     prisma.scheduledJob.count({ where: { status: 'failed' } }),

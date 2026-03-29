@@ -3,17 +3,19 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { resolve, sep } from 'path';
+
+const UPLOADS_ROOT = resolve(process.cwd(), 'uploads');
 
 /**
  * Authenticated file serving route.
  * Files in the uploads directory are only accessible if:
  * 1. User is authenticated
  * 2. The file path starts with the user's firmId (prevents cross-tenant access)
+ * 3. The resolved canonical path is within the uploads root (prevents traversal)
  */
 export const GET = withAuth('view_all', async (user, request) => {
   const url = new URL(request.url);
-  // Extract path from URL: /api/files/firmId/checklistItemId/hash-name → firmId/checklistItemId/hash-name
   const filePath = url.pathname.replace('/api/files/', '');
 
   if (!filePath) {
@@ -25,18 +27,17 @@ export const GET = withAuth('view_all', async (user, request) => {
     return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Access denied' } }, { status: 403 });
   }
 
-  // Prevent path traversal
-  const normalizedPath = filePath.replace(/\.\./g, '');
-  if (normalizedPath !== filePath) {
+  // Prevent path traversal — resolve canonical path and verify it's within uploads root
+  const fullPath = resolve(UPLOADS_ROOT, filePath);
+  if (!fullPath.startsWith(UPLOADS_ROOT + sep)) {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid path' } }, { status: 400 });
   }
 
   try {
-    const fullPath = join(process.cwd(), 'uploads', normalizedPath);
     const fileBuffer = await readFile(fullPath);
 
     // Determine content type from extension
-    const ext = normalizedPath.split('.').pop()?.toLowerCase() || '';
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
     const contentTypes: Record<string, string> = {
       pdf: 'application/pdf',
       jpg: 'image/jpeg',
@@ -51,7 +52,7 @@ export const GET = withAuth('view_all', async (user, request) => {
     return new Response(fileBuffer, {
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `inline; filename="${normalizedPath.split('/').pop()}"`,
+        'Content-Disposition': `inline; filename="${filePath.split('/').pop()}"`,
         'Cache-Control': 'private, max-age=3600',
       },
     });

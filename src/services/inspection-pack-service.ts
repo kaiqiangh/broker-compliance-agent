@@ -16,6 +16,7 @@
 import { prisma } from '../lib/prisma';
 import { DocumentService } from './document-service';
 import { htmlToPdf } from '../lib/pdf';
+import { escapeHtml } from '../lib/html';
 import archiver from 'archiver';
 import { Readable } from 'stream';
 
@@ -176,14 +177,14 @@ export class InspectionPackService {
   <div class="stamp">CONFIDENTIAL</div>
 
   <table class="meta-table">
-    <tr><td class="label">Firm</td><td>${firm.name}</td></tr>
-    <tr><td class="label">Client</td><td>${client.name}</td></tr>
-    <tr><td class="label">Policy Number</td><td>${policy.policyNumber}</td></tr>
-    <tr><td class="label">Policy Type</td><td>${policy.policyType}</td></tr>
-    <tr><td class="label">Insurer</td><td>${policy.insurerName}</td></tr>
-    <tr><td class="label">Renewal Date</td><td>${expiryDate}</td></tr>
-    <tr><td class="label">Adviser</td><td>${adviser?.name || 'Not assigned'}</td></tr>
-    <tr><td class="label">Pack Generated</td><td>${packDate}</td></tr>
+    <tr><td class="label">Firm</td><td>${escapeHtml(firm.name)}</td></tr>
+    <tr><td class="label">Client</td><td>${escapeHtml(client.name)}</td></tr>
+    <tr><td class="label">Policy Number</td><td>${escapeHtml(policy.policyNumber)}</td></tr>
+    <tr><td class="label">Policy Type</td><td>${escapeHtml(policy.policyType)}</td></tr>
+    <tr><td class="label">Insurer</td><td>${escapeHtml(policy.insurerName)}</td></tr>
+    <tr><td class="label">Renewal Date</td><td>${escapeHtml(expiryDate)}</td></tr>
+    <tr><td class="label">Adviser</td><td>${escapeHtml(adviser?.name || 'Not assigned')}</td></tr>
+    <tr><td class="label">Pack Generated</td><td>${escapeHtml(packDate)}</td></tr>
     <tr><td class="label">CPC Version</td><td>Consumer Protection Code 2012</td></tr>
   </table>
 

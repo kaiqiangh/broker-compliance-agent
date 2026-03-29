@@ -16,8 +16,12 @@ export interface SessionUser {
 
 // ─── JWT config ──────────────────────────────────────────────
 
+const JWT_SECRET_RAW = process.env.NEXTAUTH_SECRET;
+if (!JWT_SECRET_RAW && process.env.NODE_ENV === 'production') {
+  throw new Error('NEXTAUTH_SECRET environment variable is required in production');
+}
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || 'local-dev-secret-change-in-production'
+  JWT_SECRET_RAW || 'local-dev-secret-change-in-production'
 );
 const JWT_ISSUER = 'broker-comply';
 const SESSION_TTL = '8h';
@@ -217,7 +221,7 @@ export function withAuth(
       try {
         return await handler(user, request);
       } finally {
-        clearFirmContext();
+        await clearFirmContext();
       }
     } catch (err) {
       if (err instanceof UnauthorizedError) {

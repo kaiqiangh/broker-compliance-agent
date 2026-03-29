@@ -6,10 +6,11 @@
 -- ═══════════════════════════════════════════════════════════════
 
 -- Function to set the current firm_id for this session
+-- Uses session-scoped (false) so it persists across queries in the same connection
 CREATE OR REPLACE FUNCTION set_current_firm_id(firm_id TEXT)
 RETURNS VOID AS $$
 BEGIN
-  PERFORM set_config('app.current_firm_id', firm_id, true); -- true = transaction-scoped
+  PERFORM set_config('app.current_firm_id', firm_id, false); -- false = session-scoped
 END;
 $$ LANGUAGE plpgsql;
 

@@ -41,9 +41,11 @@ export async function setFirmContext(firmId: string): Promise<void> {
 
 /**
  * Clear the firm context after request completes.
+ * Clears both JS-level variable and PostgreSQL session variable.
  */
-export function clearFirmContext(): void {
+export async function clearFirmContext(): Promise<void> {
   currentFirmId = null;
+  await prisma.$executeRaw`SELECT set_config('app.current_firm_id', '', false)`;
 }
 
 /**

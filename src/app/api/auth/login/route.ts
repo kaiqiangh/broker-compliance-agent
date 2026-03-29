@@ -65,8 +65,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Successful login — clear rate limit for this IP
-    clearRateLimit(ip);
+    // Successful login
+    // Note: rate limit is NOT cleared on success to prevent attacker
+    // from using a low-value account to reset the counter.
+    // The rate limit window naturally expires after 15 minutes.
 
     const token = await createSession(user);
 
