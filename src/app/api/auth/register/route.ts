@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { registerFirm, createSession, generateCsrfToken } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -15,39 +16,19 @@ const RegisterSchema = z.object({
   name: z.string().min(1).max(255),
 });
 
-// Simple in-memory rate limiter: max 3 registration attempts per IP per minute
-const registerAttempts = new Map<string, { count: number; resetAt: number }>();
 const MAX_REGISTER_ATTEMPTS = 3;
 const REGISTER_WINDOW_MS = 60 * 1000;
 
-function getRegisterClientIp(request: Request): string {
+function getClientIp(request: Request): string {
   return request.headers.get('x-real-ip')
     || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || 'unknown';
 }
 
-function checkRegisterRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const entry = registerAttempts.get(ip);
-
-  if (!entry || now > entry.resetAt) {
-    registerAttempts.set(ip, { count: 1, resetAt: now + REGISTER_WINDOW_MS });
-    return { allowed: true };
-  }
-
-  if (entry.count >= MAX_REGISTER_ATTEMPTS) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-    return { allowed: false, retryAfter };
-  }
-
-  entry.count++;
-  return { allowed: true };
-}
-
 export async function POST(request: Request) {
-  // Rate limiting
-  const ip = getRegisterClientIp(request);
-  const rateCheck = checkRegisterRateLimit(ip);
+  // Rate limiting by IP
+  const ip = getClientIp(request);
+  const rateCheck = await checkRateLimit(`register:ip:${ip}`, MAX_REGISTER_ATTEMPTS, REGISTER_WINDOW_MS);
   if (!rateCheck.allowed) {
     return NextResponse.json(
       { error: { code: 'RATE_LIMITED', message: 'Too many registration attempts. Try again later.' } },
