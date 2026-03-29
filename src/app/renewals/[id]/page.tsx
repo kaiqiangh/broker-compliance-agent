@@ -262,6 +262,34 @@ export default function ChecklistPage() {
             📋 Suitability Assessment
           </button>
           <button
+            onClick={async () => {
+              setGeneratingPdf('inspection_pack');
+              try {
+                const res = await fetch('/api/documents', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ renewalId, documentType: 'inspection_pack' }),
+                });
+                if (!res.ok) throw new Error('Pack generation failed');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `CBI-Pack-${renewalId.slice(0, 8)}.zip`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Pack generation failed');
+              } finally {
+                setGeneratingPdf(null);
+              }
+            }}
+            disabled={generatingPdf !== null}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+          >
+            {generatingPdf === 'inspection_pack' ? '⏳ Building pack...' : '📦 CBI Inspection Pack'}
+          </button>
+          <button
             onClick={() => window.print()}
             className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
           >

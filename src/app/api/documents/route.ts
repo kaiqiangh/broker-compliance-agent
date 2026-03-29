@@ -3,10 +3,12 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { DocumentService } from '@/services/document-service';
+import { InspectionPackService } from '@/services/inspection-pack-service';
 import { htmlToPdf } from '@/lib/pdf';
 import { prisma } from '@/lib/prisma';
 
 const documentService = new DocumentService();
+const inspectionPackService = new InspectionPackService();
 
 export const POST = withAuth('complete_items', async (user, request) => {
   const body = await request.json();
@@ -17,6 +19,22 @@ export const POST = withAuth('complete_items', async (user, request) => {
   }
 
   try {
+    // Inspection pack — generates ZIP with multiple documents
+    if (documentType === 'inspection_pack') {
+      const pack = await inspectionPackService.generatePack(
+        user.firmId,
+        renewalId,
+        user.id
+      );
+
+      return new Response(new Uint8Array(pack.buffer), {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${pack.fileName}"`,
+        },
+      });
+    }
+
     const result = await documentService.generate(
       user.firmId,
       renewalId,
