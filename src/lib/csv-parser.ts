@@ -86,7 +86,7 @@ export function parseCSV(buffer: Buffer, overrideFormat?: string, delimiter?: st
     trim: true,
     bom: true,
     delimiter: detectedDelimiter,
-  });
+  }) as Record<string, string>[];
 
   if (records.length === 0) {
     return { format: 'unknown', confidence: 0, headers: [], policies: [], errors: [] };

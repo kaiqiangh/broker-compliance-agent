@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     return response;
   } catch (err) {
     if (err instanceof z.ZodError) {
-      console.warn('Register validation error [redacted]:', err.errors.length, 'issues');
+      console.warn('Register validation error [redacted]:', err.issues.length, 'issues');
       return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid input' } }, { status: 400 });
     }
     console.warn('Register error [redacted]:', err instanceof Error ? err.message : 'unknown');
