@@ -36,9 +36,8 @@ export async function POST(request: Request) {
     });
 
     // Revoke all existing sessions for this user by adding their JTI to the blocklist.
-    // Since JWTs are stateless and use sub + iat as JTI, we can't enumerate all tokens.
-    // Instead, we store a "revoke all tokens issued before this timestamp" marker.
-    revokeToken(`user:${userId}:all`, Date.now() + 8 * 60 * 60 * 1000);
+    // TTL = 8 hours (max session lifetime) ensures all existing tokens are blocked.
+    await revokeToken(`user:${userId}:all`, 8 * 60 * 60);
 
     return NextResponse.json({ message: 'Password has been reset successfully.' });
   } catch (err) {

@@ -63,9 +63,9 @@ export const POST = withAuth(null, async (user, request) => {
           const JWT_SECRET_RAW = process.env.NEXTAUTH_SECRET!;
           const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
           const { payload } = await jwtVerify(token, JWT_SECRET, { issuer: 'broker-comply' });
-          const exp = (payload.exp ?? 0) * 1000;
+          const ttlSeconds = Math.max(1, (payload.exp ?? 0) - Math.floor(Date.now() / 1000));
           const jti = payload.jti ?? (payload.sub as string) + ':' + String(payload.iat);
-          revokeToken(jti, exp);
+          await revokeToken(jti, ttlSeconds);
         }
       }
     } catch {
