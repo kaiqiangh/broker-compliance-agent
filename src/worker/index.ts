@@ -5,11 +5,19 @@ import { htmlToPdf } from '../lib/pdf';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
-const RETRY_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes base
-const MAX_ATTEMPTS = 3;
+export const POLL_INTERVAL_MS = 30_000; // 30 seconds
+export const RETRY_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes base
+export const MAX_ATTEMPTS = 3;
 
 let isShuttingDown = false;
+
+export function setShuttingDown(value: boolean) {
+  isShuttingDown = value;
+}
+
+export function getIsShuttingDown() {
+  return isShuttingDown;
+}
 
 async function main() {
   console.log('[Worker] Starting...');
@@ -35,7 +43,7 @@ async function main() {
   process.exit(0);
 }
 
-async function processJobs(): Promise<number> {
+export async function processJobs(): Promise<number> {
   const now = new Date();
 
   // Claim jobs atomically
@@ -269,7 +277,10 @@ function sleep(ms: number): Promise<void> {
 process.on('SIGTERM', () => { isShuttingDown = true; });
 process.on('SIGINT', () => { isShuttingDown = true; });
 
-main().catch(err => {
-  console.error('[Worker] Fatal error:', err);
-  process.exit(1);
-});
+// Only auto-start when run directly (not imported for testing)
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+  main().catch(err => {
+    console.error('[Worker] Fatal error:', err);
+    process.exit(1);
+  });
+}

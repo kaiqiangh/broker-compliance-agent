@@ -1,121 +1,259 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Worker job processor logic tests (no DB required)
+// Mock all external dependencies before importing the worker
+vi.mock('../../lib/prisma', () => ({
+  prisma: {
+    $queryRawUnsafe: vi.fn(),
+    scheduledJob: {
+      update: vi.fn(),
+    },
+    auditEvent: {
+      create: vi.fn(),
+    },
+    client: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    policy: {
+      findMany: vi.fn(),
+    },
+    renewal: {
+      findMany: vi.fn(),
+    },
+    checklistItem: {
+      updateMany: vi.fn(),
+    },
+    $executeRaw: vi.fn(),
+  },
+}));
 
-describe('Job processor — retry logic', () => {
-  it('calculates backoff delay based on attempt count', () => {
-    const RETRY_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
+vi.mock('../../services/notification-service', () => ({
+  NotificationService: vi.fn().mockImplementation(() => ({
+    checkAndScheduleReminders: vi.fn().mockResolvedValue(0),
+  })),
+}));
 
-    function getRetryTime(attempt: number): Date {
-      const delay = RETRY_BACKOFF_MS * Math.pow(2, attempt - 1);
-      return new Date(Date.now() + delay);
-    }
+vi.mock('../../services/document-service', () => ({
+  DocumentService: vi.fn().mockImplementation(() => ({
+    generate: vi.fn(),
+  })),
+}));
 
-    const retry1 = getRetryTime(1);
-    const retry2 = getRetryTime(2);
-    const retry3 = getRetryTime(3);
+vi.mock('../../lib/pdf', () => ({
+  htmlToPdf: vi.fn(),
+}));
 
-    // Each retry should be later than the previous
-    expect(retry2.getTime()).toBeGreaterThan(retry1.getTime());
-    expect(retry3.getTime()).toBeGreaterThan(retry2.getTime());
+vi.mock('fs', () => ({
+  promises: {
+    mkdir: vi.fn(),
+    writeFile: vi.fn(),
+  },
+}));
 
-    // Exponential backoff: retry2 ~2x retry1 delay, retry3 ~4x
-    const delay1 = retry1.getTime() - Date.now();
-    const delay2 = retry2.getTime() - Date.now();
-    const delay3 = retry3.getTime() - Date.now();
+import { prisma } from '../../lib/prisma';
+import { NotificationService } from '../../services/notification-service';
+import { DocumentService } from '../../services/document-service';
+import {
+  processJobs,
+  RETRY_BACKOFF_MS,
+  MAX_ATTEMPTS,
+  setShuttingDown,
+  getIsShuttingDown,
+} from '../../worker/index';
 
-    expect(delay1).toBeGreaterThanOrEqual(RETRY_BACKOFF_MS - 100);
-    expect(delay1).toBeLessThanOrEqual(RETRY_BACKOFF_MS + 100);
-    expect(delay2).toBeGreaterThanOrEqual(RETRY_BACKOFF_MS * 2 - 100);
-    expect(delay3).toBeGreaterThanOrEqual(RETRY_BACKOFF_MS * 4 - 100);
+// Worker tests — job claiming + retry logic
+
+describe('Worker — processJobs()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setShuttingDown(false);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Re-configure NotificationService mock after clearAllMocks
+    (NotificationService as any).mockImplementation(() => ({
+      checkAndScheduleReminders: vi.fn().mockResolvedValue(0),
+    }));
   });
 
-  it('max attempts limits retries', () => {
-    const MAX_ATTEMPTS = 3;
-
-    function shouldRetry(attempts: number, maxAttempts: number): boolean {
-      return attempts < maxAttempts;
-    }
-
-    expect(shouldRetry(1, MAX_ATTEMPTS)).toBe(true);
-    expect(shouldRetry(2, MAX_ATTEMPTS)).toBe(true);
-    expect(shouldRetry(3, MAX_ATTEMPTS)).toBe(false);
-    expect(shouldRetry(4, MAX_ATTEMPTS)).toBe(false);
-  });
-});
-
-describe('Notification scheduler — day matching', () => {
-  function daysUntil(target: Date, from: Date = new Date()): number {
-    return Math.ceil((target.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
-  it('calculates days until expiry correctly', () => {
-    const now = new Date();
-    const in40Days = new Date(now.getTime() + 40 * 24 * 60 * 60 * 1000);
-    const in20Days = new Date(now.getTime() + 20 * 24 * 60 * 60 * 1000);
-    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    expect(daysUntil(in40Days, now)).toBe(40);
-    expect(daysUntil(in20Days, now)).toBe(20);
-    expect(daysUntil(in7Days, now)).toBe(7);
-    expect(daysUntil(yesterday, now)).toBe(-1);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('matches reminder type to day threshold', () => {
-    const configs = [
-      { type: '40_day', minDays: 21, maxDays: 40 },
-      { type: '20_day', minDays: 8, maxDays: 20 },
-      { type: '7_day', minDays: 2, maxDays: 7 },
-      { type: '1_day', minDays: 1, maxDays: 1 },
+  // 1. Job claiming — pending job with scheduledFor <= now → claimed and processed
+  it('claims and processes pending jobs with scheduledFor <= now', async () => {
+    const pendingJob = {
+      id: 'job-1',
+      job_type: 'send_renewal_reminder',
+      payload: {},
+      attempts: 1,
+      max_attempts: 3,
+    };
+
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([pendingJob]);
+    (prisma.scheduledJob.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    const processed = await processJobs();
+
+    expect(processed).toBe(1);
+    // Should have claimed jobs via queryRawUnsafe
+    expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+    // Should have marked job as completed
+    expect(prisma.scheduledJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-1' },
+      data: { status: 'completed', completedAt: expect.any(Date) },
+    });
+  });
+
+  it('processes multiple jobs in one batch', async () => {
+    const jobs = [
+      { id: 'job-1', job_type: 'send_renewal_reminder', payload: {}, attempts: 1, max_attempts: 3 },
+      { id: 'job-2', job_type: 'send_renewal_reminder', payload: {}, attempts: 1, max_attempts: 3 },
     ];
 
-    function matchReminder(daysUntilDue: number) {
-      if (daysUntilDue <= 0) return 'overdue';
-      for (const config of configs) {
-        if (daysUntilDue >= config.minDays && daysUntilDue <= config.maxDays) return config.type;
-      }
-      return null;
-    }
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue(jobs);
+    (prisma.scheduledJob.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
-    expect(matchReminder(40)).toBe('40_day');
-    expect(matchReminder(35)).toBe('40_day');
-    expect(matchReminder(21)).toBe('40_day');
-    expect(matchReminder(20)).toBe('20_day');
-    expect(matchReminder(15)).toBe('20_day');
-    expect(matchReminder(8)).toBe('20_day');
-    expect(matchReminder(7)).toBe('7_day');
-    expect(matchReminder(3)).toBe('7_day');
-    expect(matchReminder(2)).toBe('7_day');
-    expect(matchReminder(1)).toBe('1_day');
-    expect(matchReminder(0)).toBe('overdue');
-    expect(matchReminder(-5)).toBe('overdue');
-    expect(matchReminder(50)).toBeNull();
+    const processed = await processJobs();
+
+    expect(processed).toBe(2);
+    expect(prisma.scheduledJob.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 0 when no pending jobs exist', async () => {
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const processed = await processJobs();
+
+    expect(processed).toBe(0);
+    expect(prisma.scheduledJob.update).not.toHaveBeenCalled();
+  });
+
+  // 2. Completed jobs are not re-processed (they're filtered by the SQL query)
+  it('only claims jobs with status=pending (SQL filter)', async () => {
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await processJobs();
+
+    // Verify the SQL query filters on status='pending'
+    const sqlQuery = (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(sqlQuery).toContain("status = 'pending'");
+    expect(sqlQuery).toContain('scheduled_for <= $1');
+  });
+
+  // 3. Failed job transitions to failed after max attempts
+  it('marks job as failed when attempts >= maxAttempts', async () => {
+    const failedJob = {
+      id: 'job-fail',
+      job_type: 'generate_document',
+      payload: { firmId: 'f1', renewalId: 'r1', documentType: 'suitability', generatedBy: 'u1' },
+      attempts: 3,
+      max_attempts: 3,
+    };
+
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([failedJob]);
+    (DocumentService as any).mockImplementation(() => ({
+      generate: vi.fn().mockRejectedValue(new Error('Generation failed')),
+    }));
+
+    await processJobs();
+
+    expect(prisma.scheduledJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-fail' },
+      data: {
+        status: 'failed',
+        lastError: 'Generation failed',
+      },
+    });
+  });
+
+  // 4. Retry with backoff — failed job with remaining attempts → status=pending, scheduledFor updated
+  it('retries failed job with exponential backoff when attempts < maxAttempts', async () => {
+    const retryableJob = {
+      id: 'job-retry',
+      job_type: 'generate_document',
+      payload: { firmId: 'f1', renewalId: 'r1', documentType: 'suitability', generatedBy: 'u1' },
+      attempts: 1,
+      max_attempts: 3,
+    };
+
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([retryableJob]);
+    (DocumentService as any).mockImplementation(() => ({
+      generate: vi.fn().mockRejectedValue(new Error('Temporary failure')),
+    }));
+
+    const beforeTime = Date.now();
+    await processJobs();
+    const afterTime = Date.now();
+
+    expect(prisma.scheduledJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-retry' },
+      data: expect.objectContaining({
+        status: 'pending',
+        lastError: 'Temporary failure',
+      }),
+    });
+
+    // Verify the scheduledFor is set with backoff
+    const updateCall = (prisma.scheduledJob.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const scheduledFor = updateCall.data.scheduledFor as Date;
+    const expectedDelay = RETRY_BACKOFF_MS * Math.pow(2, 1 - 1); // attempt=1
+    expect(scheduledFor.getTime()).toBeGreaterThanOrEqual(beforeTime + expectedDelay);
+    expect(scheduledFor.getTime()).toBeLessThanOrEqual(afterTime + expectedDelay);
+  });
+
+  it('increases backoff delay for later attempts', async () => {
+    const retryableJob = {
+      id: 'job-retry-2',
+      job_type: 'generate_document',
+      payload: { firmId: 'f1', renewalId: 'r1', documentType: 'suitability', generatedBy: 'u1' },
+      attempts: 2,
+      max_attempts: 3,
+    };
+
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([retryableJob]);
+    (DocumentService as any).mockImplementation(() => ({
+      generate: vi.fn().mockRejectedValue(new Error('Still failing')),
+    }));
+
+    const beforeTime = Date.now();
+    await processJobs();
+
+    const updateCall = (prisma.scheduledJob.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const scheduledFor = updateCall.data.scheduledFor as Date;
+    // attempt=2: backoff = 5min * 2^(2-1) = 10min
+    const expectedDelay = RETRY_BACKOFF_MS * Math.pow(2, 2 - 1);
+    expect(scheduledFor.getTime()).toBeGreaterThanOrEqual(beforeTime + expectedDelay);
+  });
+
+  // 5. Graceful shutdown — SIGTERM sets isShuttingDown flag
+  it('getIsShuttingDown returns false initially', () => {
+    expect(getIsShuttingDown()).toBe(false);
+  });
+
+  it('setShuttingDown toggles the shutdown flag', () => {
+    setShuttingDown(true);
+    expect(getIsShuttingDown()).toBe(true);
+
+    setShuttingDown(false);
+    expect(getIsShuttingDown()).toBe(false);
+  });
+
+  it('processJobs still works when not shutting down', async () => {
+    setShuttingDown(false);
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const processed = await processJobs();
+    expect(processed).toBe(0);
   });
 });
 
-describe('Email template data', () => {
-  it('builds email context from renewal data', () => {
-    const renewal = {
-      clientName: 'Seán Ó Briain',
-      policyNumber: 'POL-2024-001',
-      policyType: 'motor',
-      insurerName: 'Aviva',
-      expiryDate: new Date('2025-03-15'),
-      premium: 1245,
-      checklistProgress: '3/8',
-      daysUntilDue: 20,
-    };
+describe('Worker — backoff constants', () => {
+  it('RETRY_BACKOFF_MS is 5 minutes', () => {
+    expect(RETRY_BACKOFF_MS).toBe(5 * 60 * 1000);
+  });
 
-    const emailContext = {
-      subject: `Renewal action required: ${renewal.clientName} — ${renewal.policyNumber}`,
-      body: `Policy ${renewal.policyNumber} (${renewal.policyType}, ${renewal.insurerName}) for ${renewal.clientName} expires in ${renewal.daysUntilDue} days. Checklist: ${renewal.checklistProgress}. Premium: €${renewal.premium}.`,
-    };
-
-    expect(emailContext.subject).toContain('Seán Ó Briain');
-    expect(emailContext.subject).toContain('POL-2024-001');
-    expect(emailContext.body).toContain('20 days');
-    expect(emailContext.body).toContain('3/8');
-    expect(emailContext.body).toContain('€1245');
+  it('MAX_ATTEMPTS is 3', () => {
+    expect(MAX_ATTEMPTS).toBe(3);
   });
 });
