@@ -15,7 +15,7 @@ export default function Error({
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Something went wrong</h2>
         <p className="text-gray-500 mb-6">
-          {error.message || 'An unexpected error occurred. Please try again.'}
+          An unexpected error occurred. Please try again.
         </p>
         <button
           onClick={reset}

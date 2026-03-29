@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { daysBetween } from '../lib/dates';
+import { EmailService } from './email-service';
 
 export type ReminderType = '40_day' | '20_day' | '7_day' | '1_day' | 'overdue';
 
@@ -18,6 +19,11 @@ const REMINDER_CONFIGS: ReminderConfig[] = [
 ];
 
 export class NotificationService {
+  private emailService: EmailService;
+
+  constructor() {
+    this.emailService = new EmailService();
+  }
   /**
    * Check all renewals and schedule reminders that are due.
    * Called by the worker on each processing cycle.
@@ -50,9 +56,9 @@ export class NotificationService {
       maxDate.setDate(maxDate.getDate() + maxDays);
       maxDate.setHours(23, 59, 59, 999);
 
-      // For overdue: find renewals past due date
+      // For overdue: find renewals past due date (including today)
       const dateFilter = config.type === 'overdue'
-        ? { dueDate: { lt: now } }
+        ? { dueDate: { lte: now } }
         : { dueDate: { gte: minDate, lte: maxDate } };
 
       const renewals = await prisma.renewal.findMany({
@@ -81,7 +87,7 @@ export class NotificationService {
 
         if (recipients.length === 0) continue;
 
-        // Record notification (in production: send email here)
+        // Record notification
         const sentTo = recipients.map(r => r.email).join(',');
         await prisma.notification.create({
           data: {
@@ -91,6 +97,28 @@ export class NotificationService {
             sentTo,
           },
         });
+
+        // Send emails to each recipient
+        const daysUntil = daysBetween(now, renewal.dueDate);
+        for (const recipient of recipients) {
+          await this.emailService.sendReminder(
+            recipient.email,
+            recipient.name,
+            config.type,
+            {
+              clientName: renewal.policy.client.name,
+              policyNumber: renewal.policy.policyNumber,
+              policyType: renewal.policy.policyType,
+              insurerName: renewal.policy.insurerName,
+              expiryDate: renewal.dueDate,
+              premium: Number(renewal.newPremium || renewal.policy.premium),
+              checklistProgress: `${renewal.checklistItems.filter(i => i.status === 'approved' || i.status === 'completed').length}/${renewal.checklistItems.length}`,
+              daysUntilDue: daysUntil,
+              renewalUrl: `${process.env.APP_URL || 'http://localhost:3000'}/renewals/${renewal.id}`,
+              firmName: renewal.firm.name,
+            }
+          );
+        }
 
         // Log audit
         await prisma.auditEvent.create({

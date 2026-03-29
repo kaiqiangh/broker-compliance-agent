@@ -106,6 +106,8 @@ export const DELETE = withAuth('admin', async (user, request) => {
   // Art 17(3)(b): compliance records are exempt from erasure.
   // We anonymize PII but retain compliance evidence.
 
+  const erasureTimestamp = new Date();
+
   // 1. Anonymize client PII
   await prisma.client.update({
     where: { id: clientId },
@@ -117,13 +119,39 @@ export const DELETE = withAuth('admin', async (user, request) => {
     },
   });
 
-  // 2. Anonymize audit events containing client name
+  // 2. Anonymize audit event metadata containing client PII
   await prisma.$executeRaw`
     UPDATE audit_events
-    SET metadata = jsonb_set(metadata, '{clientName}', '"[REDACTED]"')
+    SET metadata = jsonb_set(
+      jsonb_set(
+        jsonb_set(metadata, '{clientName}', '"[REDACTED]"'),
+        '{email}', '"[REDACTED]"'
+      ),
+      '{policyNumber}', '"[REDACTED]"'
+    )
     WHERE firm_id = ${user.firmId}
-    AND metadata->>'clientName' = ${client.name}
+    AND (
+      metadata->>'clientName' = ${client.name}
+      OR metadata->>'email' = ${client.email || ''}
+    )
   `;
+
+  // 3. Anonymize IP addresses in audit events for this client's policies
+  const clientPolicies = await prisma.policy.findMany({
+    where: { clientId, firmId: user.firmId },
+    select: { id: true },
+  });
+  const policyIds = clientPolicies.map(p => p.id);
+
+  if (policyIds.length > 0) {
+    await prisma.$executeRaw`
+      UPDATE audit_events
+      SET ip_address = '0.0.0.0'
+      WHERE firm_id = ${user.firmId}
+      AND entity_id = ANY(${policyIds})
+      AND ip_address IS NOT NULL
+    `;
+  }
 
   // 3. Audit the erasure itself
   await prisma.auditEvent.create({

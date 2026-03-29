@@ -8,7 +8,10 @@ import { z } from 'zod';
 const RegisterSchema = z.object({
   firmName: z.string().min(1).max(255),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(10).regex(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+    'Password must contain at least one lowercase letter, one uppercase letter, and one digit'
+  ),
   name: z.string().min(1).max(255),
 });
 
@@ -53,7 +56,8 @@ export async function POST(request: Request) {
     return response;
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid input', details: err.errors }, { status: 400 });
+      console.error('Register validation error:', err.errors);
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
     console.error('Register error:', err);
     return NextResponse.json({ error: { code: 'ERROR', message: 'Internal server error' } }, { status: 500 });

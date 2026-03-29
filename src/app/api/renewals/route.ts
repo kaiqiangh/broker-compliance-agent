@@ -10,7 +10,7 @@ export const GET = withAuth('view_all', async (user, request) => {
   const url = new URL(request.url);
   const status = url.searchParams.get('status') || undefined;
   const policyType = url.searchParams.get('type') || undefined;
-  const daysAhead = parseInt(url.searchParams.get('days') || '90', 10);
+  const daysAhead = Math.min(Math.max(parseInt(url.searchParams.get('days') || '90', 10) || 90, 1), 365);
 
   const renewals = await renewalService.getTimeline(user.firmId, {
     status,

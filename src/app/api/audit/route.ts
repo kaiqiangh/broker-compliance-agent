@@ -30,8 +30,8 @@ export const GET = withAuth('export_audit', async (user, request) => {
     endDate: url.searchParams.get('to') ? new Date(url.searchParams.get('to')!) : undefined,
     action: url.searchParams.get('action') || undefined,
     entityType: url.searchParams.get('entity') || undefined,
-    limit: parseInt(url.searchParams.get('limit') || '50', 10),
-    offset: parseInt(url.searchParams.get('offset') || '0', 10),
+    limit: Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 1), 500),
+    offset: Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0),
   };
 
   const result = await auditService.query(user.firmId, filters);

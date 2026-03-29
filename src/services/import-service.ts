@@ -43,6 +43,40 @@ export class ImportService {
     let importedCount = 0;
     let skippedCount = 0;
 
+    // Pre-fetch existing policies for this firm to avoid N+1 queries
+    const dedupHashes = parsed.policies.map(p => computeDedupHash({
+      firmId,
+      policyNumber: p.policyNumber,
+      policyType: p.policyType,
+      insurerName: p.insurerName,
+      inceptionDate: p.inceptionDate,
+    }));
+    const normalizedNumbers = parsed.policies.map(p => normalizePolicyNumber(p.policyNumber));
+
+    const existingPolicies = await prisma.policy.findMany({
+      where: {
+        firmId,
+        OR: [
+          { dedupHash: { in: dedupHashes } },
+          { policyNumberNormalized: { in: normalizedNumbers } },
+        ],
+      },
+    });
+
+    // Build lookup maps
+    const byHash = new Map(existingPolicies.map(p => [p.dedupHash, p]));
+    const byNormalized = new Map(existingPolicies.map(p => [p.policyNumberNormalized, p]));
+
+    // Pre-fetch existing clients
+    const clientNames = [...new Set(parsed.policies.map(p => p.clientName))];
+    const existingClients = await prisma.client.findMany({
+      where: {
+        firmId,
+        name: { in: clientNames, mode: 'insensitive' },
+      },
+    });
+    const clientByName = new Map(existingClients.map(c => [c.name.toLowerCase(), c]));
+
     for (const policy of parsed.policies) {
       try {
         const dedupHash = computeDedupHash({
@@ -54,9 +88,7 @@ export class ImportService {
         });
 
         // Tier 1: exact hash match
-        const existing = await prisma.policy.findFirst({
-          where: { firmId, dedupHash },
-        });
+        const existing = byHash.get(dedupHash);
 
         if (existing) {
           const hasChanges =
@@ -82,9 +114,7 @@ export class ImportService {
 
         // Tier 2: normalized policy number match
         const normalizedNumber = normalizePolicyNumber(policy.policyNumber);
-        const byNumber = await prisma.policy.findFirst({
-          where: { firmId, policyNumberNormalized: normalizedNumber },
-        });
+        const byNumber = byNormalized.get(normalizedNumber);
 
         if (byNumber) {
           await prisma.policy.update({
@@ -101,9 +131,7 @@ export class ImportService {
         }
 
         // New policy — find or create client
-        let client = await prisma.client.findFirst({
-          where: { firmId, name: { equals: policy.clientName, mode: 'insensitive' } },
-        });
+        let client = clientByName.get(policy.clientName.toLowerCase());
 
         if (!client) {
           client = await prisma.client.create({
@@ -113,6 +141,7 @@ export class ImportService {
               address: policy.clientAddress || null,
             },
           });
+          clientByName.set(policy.clientName.toLowerCase(), client);
         }
 
         await prisma.policy.create({

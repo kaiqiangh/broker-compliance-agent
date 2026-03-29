@@ -3,6 +3,8 @@
  * Falls back to console logging if RESEND_API_KEY is not configured.
  */
 
+import { escapeHtml } from '../lib/html';
+
 interface EmailOptions {
   to: string | string[];
   subject: string;
@@ -91,7 +93,7 @@ export class EmailService {
       daysUntilDue: number;
     }>
   ) {
-    const subject = `${firmName}: ${renewals.length} renewals ${reminderType.replace('_', ' ')} reminder`;
+    const subject = `${escapeHtml(firmName)}: ${renewals.length} renewals ${reminderType.replace('_', ' ')} reminder`;
     const html = this.buildDigestHtml(firmName, renewals);
 
     return this.send({ to, subject, html });
@@ -105,7 +107,7 @@ export class EmailService {
       '1_day': 'URGENT: renewal expires tomorrow',
       'overdue': 'OVERDUE: renewal past deadline',
     };
-    return `${prefixes[reminderType] || 'Renewal reminder'}: ${data.clientName} — ${data.policyNumber}`;
+    return `${prefixes[reminderType] || 'Renewal reminder'}: ${escapeHtml(data.clientName)} — ${escapeHtml(data.policyNumber)}`;
   }
 
   private buildReminderHtml(recipientName: string, reminderType: string, data: {
@@ -130,18 +132,18 @@ export class EmailService {
 <html>
 <body style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <h2 style="color: ${urgencyColor};">${this.getSubject(reminderType, data)}</h2>
-  <p>Hi ${recipientName},</p>
+  <p>Hi ${escapeHtml(recipientName)},</p>
   <p>A renewal requires your attention:</p>
   <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Client</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${data.clientName}</td></tr>
-    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Policy</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${data.policyNumber} (${data.policyType})</td></tr>
-    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Insurer</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${data.insurerName}</td></tr>
-    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Expiry</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${expiryFormatted} (${data.daysUntilDue} days)</td></tr>
+    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Client</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(data.clientName)}</td></tr>
+    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Policy</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(data.policyNumber)} (${escapeHtml(data.policyType)})</td></tr>
+    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Insurer</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(data.insurerName)}</td></tr>
+    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Expiry</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(expiryFormatted)} (${data.daysUntilDue} days)</td></tr>
     <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Premium</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">€${data.premium.toFixed(2)}</td></tr>
     <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Checklist</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb;">${data.checklistProgress}</td></tr>
   </table>
   <p><a href="${data.renewalUrl}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">View Renewal</a></p>
-  <p style="color: #6b7280; font-size: 12px;">This is an automated message from ${data.firmName} via BrokerComply.</p>
+  <p style="color: #6b7280; font-size: 12px;">This is an automated message from ${escapeHtml(data.firmName)} via BrokerComply.</p>
 </body>
 </html>`;
   }
@@ -154,9 +156,9 @@ export class EmailService {
   }>): string {
     const rows = renewals.map(r => `
       <tr>
-        <td style="padding: 8px; border: 1px solid #e5e7eb;">${r.clientName}</td>
-        <td style="padding: 8px; border: 1px solid #e5e7eb;">${r.policyNumber}</td>
-        <td style="padding: 8px; border: 1px solid #e5e7eb;">${new Date(r.dueDate).toLocaleDateString('en-IE')}</td>
+        <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(r.clientName)}</td>
+        <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(r.policyNumber)}</td>
+        <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(new Date(r.dueDate).toLocaleDateString('en-IE'))}</td>
         <td style="padding: 8px; border: 1px solid #e5e7eb;">${r.daysUntilDue} days</td>
       </tr>
     `).join('');
@@ -165,7 +167,7 @@ export class EmailService {
 <!DOCTYPE html>
 <html>
 <body style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <h2>${firmName}: ${renewals.length} upcoming renewals</h2>
+  <h2>${escapeHtml(firmName)}: ${renewals.length} upcoming renewals</h2>
   <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
     <thead>
       <tr style="background: #f3f4f6;">

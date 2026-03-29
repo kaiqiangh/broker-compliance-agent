@@ -21,8 +21,9 @@ export const POST = withAuth('invite_users', async (user, request) => {
     return NextResponse.json({ error: { code: 'CONFLICT', message: 'User with this email already exists' } }, { status: 409 });
   }
 
-  // Generate temporary password (in production, send invite email with reset link)
-  const tempPassword = crypto.randomUUID().slice(0, 12);
+  // Generate stronger temporary password (16 chars with mixed case + digits)
+  const tempPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+    + String.fromCharCode(65 + Math.floor(Math.random() * 26)); // ensure at least one uppercase
 
   const newUser = await createUser({
     firmId: user.firmId,

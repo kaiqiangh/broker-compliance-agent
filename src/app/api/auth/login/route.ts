@@ -9,7 +9,50 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+// Simple in-memory rate limiter: max 5 failed attempts per IP per 15 minutes
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function getClientIp(request: Request): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown';
+}
+
+function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return { allowed: true };
+  }
+
+  if (entry.count >= MAX_LOGIN_ATTEMPTS) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  entry.count++;
+  return { allowed: true };
+}
+
+function clearRateLimit(ip: string): void {
+  loginAttempts.delete(ip);
+}
+
 export async function POST(request: Request) {
+  // Rate limiting
+  const ip = getClientIp(request);
+  const rateCheck = checkRateLimit(ip);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Try again later.' } },
+      { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } }
+    );
+  }
+
   try {
     const body = await request.json();
     const { email, password } = LoginSchema.parse(body);
@@ -21,6 +64,9 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
+    // Successful login — clear rate limit for this IP
+    clearRateLimit(ip);
 
     const token = createSession(user);
 

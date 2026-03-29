@@ -133,14 +133,21 @@ export function deleteSession(token: string): void {
 }
 
 // Periodic cleanup of expired sessions (every 5 minutes)
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, session] of sessions) {
-    if (now > session.expiresAt) {
-      sessions.delete(token);
+// Guard against multiple intervals in dev HMR
+const globalForSessions = globalThis as unknown as {
+  _sessionCleanup: ReturnType<typeof setInterval> | undefined;
+};
+
+if (!globalForSessions._sessionCleanup) {
+  globalForSessions._sessionCleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [token, session] of sessions) {
+      if (now > session.expiresAt) {
+        sessions.delete(token);
+      }
     }
-  }
-}, 5 * 60 * 1000);
+  }, 5 * 60 * 1000);
+}
 
 /**
  * Extract session from request cookie.

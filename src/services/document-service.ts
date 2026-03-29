@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { AuditService } from './audit-service';
+import { escapeHtml } from '../lib/html';
 
 const auditService = new AuditService();
 
@@ -61,22 +62,22 @@ export class DocumentService {
 </head>
 <body>
   <div class="header">
-    <div class="firm-name">${data.firmName}</div>
-    <div>${data.firmAddress}</div>
+    <div class="firm-name">${escapeHtml(data.firmName)}</div>
+    <div>${escapeHtml(data.firmAddress)}</div>
   </div>
 
-  <div class="date">${today}</div>
+  <div class="date">${escapeHtml(today)}</div>
 
   <div style="margin-top: 20px;">
-    ${data.clientName}<br>
-    ${data.clientAddress}
+    ${escapeHtml(data.clientName)}<br>
+    ${escapeHtml(data.clientAddress)}
   </div>
 
-  <div class="subject">Re: Renewal of your ${data.policyType} Insurance — Policy ${data.policyNumber}</div>
+  <div class="subject">Re: Renewal of your ${escapeHtml(data.policyType)} Insurance — Policy ${escapeHtml(data.policyNumber)}</div>
 
-  <p>Dear ${data.clientName.split(' ')[0]},</p>
+  <p>Dear ${escapeHtml(data.clientName.split(' ')[0])},</p>
 
-  <p>Your ${data.policyType.toLowerCase()} insurance policy with <strong>${data.insurerName}</strong> (Policy No: ${data.policyNumber}) is due for renewal on <strong>${expiryFormatted}</strong>.</p>
+  <p>Your ${escapeHtml(data.policyType.toLowerCase())} insurance policy with <strong>${escapeHtml(data.insurerName)}</strong> (Policy No: ${escapeHtml(data.policyNumber)}) is due for renewal on <strong>${escapeHtml(expiryFormatted)}</strong>.</p>
 
   <table class="premium-table">
     <tr><td class="label">Previous Premium</td><td>€${data.previousPremium.toFixed(2)}</td></tr>
@@ -94,21 +95,21 @@ export class DocumentService {
 
   <p>We have reviewed your policy and believe it continues to meet your insurance needs. If your circumstances have changed since your last renewal, or if you would like to discuss your cover, please contact us before the renewal date.</p>
 
-  <p>If you are happy to proceed with the renewal, no action is required — your policy will automatically renew on ${expiryFormatted}.</p>
+  <p>If you are happy to proceed with the renewal, no action is required — your policy will automatically renew on ${escapeHtml(expiryFormatted)}.</p>
 
-  <p>If you wish to make any changes or do not wish to renew, please contact us before ${expiryFormatted}.</p>
+  <p>If you wish to make any changes or do not wish to renew, please contact us before ${escapeHtml(expiryFormatted)}.</p>
 
   <div class="commission">
-    <strong>Commission Disclosure:</strong> We receive commission of approximately ${data.commissionRate}% from ${data.insurerName} for arranging and administering this policy. This commission is included in the premium quoted above.
+    <strong>Commission Disclosure:</strong> We receive commission of approximately ${data.commissionRate}% from ${escapeHtml(data.insurerName)} for arranging and administering this policy. This commission is included in the premium quoted above.
   </div>
 
   <div class="signature">
     <p>Yours sincerely,</p>
-    <p><strong>${data.adviserName}</strong><br>${data.firmName}</p>
+    <p><strong>${escapeHtml(data.adviserName)}</strong><br>${escapeHtml(data.firmName)}</p>
   </div>
 
   <div class="footer">
-    ${data.firmName} is regulated by the Central Bank of Ireland.<br>
+    ${escapeHtml(data.firmName)} is regulated by the Central Bank of Ireland.<br>
     This letter constitutes a renewal notification under the Consumer Protection Code ${data.cpcVersion === 'cp158' ? '(as revised by CP158)' : '2012'}.
   </div>
 </body>

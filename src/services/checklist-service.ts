@@ -16,17 +16,17 @@ export class ChecklistService {
 
     if (!item) throw new Error('Checklist item not found');
 
+    const requiresSignOff = (ITEMS_REQUIRING_SIGN_OFF as readonly string[]).includes(item.itemType);
+    const targetStatus: ChecklistStatus = requiresSignOff ? 'pending_review' : 'completed';
+
     const transition = transitionChecklistItem(
       item.status as ChecklistStatus,
-      'completed'
+      targetStatus
     );
 
     if (!transition.success) {
       throw new Error('error' in transition ? transition.error : 'Invalid transition');
     }
-
-    const requiresSignOff = (ITEMS_REQUIRING_SIGN_OFF as readonly string[]).includes(item.itemType);
-    const targetStatus: ChecklistStatus = requiresSignOff ? 'pending_review' : 'completed';
 
     const updated = await prisma.checklistItem.update({
       where: { id: itemId },

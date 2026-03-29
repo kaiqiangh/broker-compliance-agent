@@ -1,4 +1,4 @@
-import { format, parse, differenceInDays, subDays, isValid } from 'date-fns';
+import { format, parse, differenceInCalendarDays, subDays, isValid } from 'date-fns';
 
 /**
  * Detect and parse date formats common in Irish BMS exports.
@@ -49,10 +49,11 @@ export function formatISODate(date: Date): string {
 }
 
 /**
- * Calculate days between two dates
+ * Calculate days between two dates (calendar days, not 24-hour periods).
+ * Uses differenceInCalendarDays to avoid timezone/edge-of-day issues.
  */
 export function daysBetween(a: Date, b: Date): number {
-  return differenceInDays(b, a);
+  return differenceInCalendarDays(b, a);
 }
 
 /**

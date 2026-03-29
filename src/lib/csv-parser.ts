@@ -63,16 +63,29 @@ export function detectFormat(headers: string[]): { format: string; confidence: n
 }
 
 /**
- * Parse CSV buffer into policies based on detected format
+ * Parse CSV buffer into policies based on detected format.
+ * Supports CSV (comma), TSV (tab), and semicolon delimiters.
  */
-export function parseCSV(buffer: Buffer, overrideFormat?: string): ParseResult {
+export function parseCSV(buffer: Buffer, overrideFormat?: string, delimiter?: string): ParseResult {
   const raw = buffer.toString('utf-8');
+
+  // Auto-detect delimiter if not specified
+  let detectedDelimiter = delimiter;
+  if (!detectedDelimiter) {
+    const firstLine = raw.split('\n')[0] || '';
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const semiCount = (firstLine.match(/;/g) || []).length;
+    if (tabCount > 0 && tabCount >= semiCount) detectedDelimiter = '\t';
+    else if (semiCount > 2) detectedDelimiter = ';';
+    else detectedDelimiter = ',';
+  }
 
   const records = csvParse(raw, {
     columns: true,
     skip_empty_lines: true,
     trim: true,
     bom: true,
+    delimiter: detectedDelimiter,
   });
 
   if (records.length === 0) {
