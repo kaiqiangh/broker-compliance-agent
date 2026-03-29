@@ -67,6 +67,11 @@ export class ChecklistService {
 
     if (!item) throw new Error('Checklist item not found');
 
+    // CPC segregation of duties: cannot approve your own completed item
+    if (item.completedBy === approvedBy) {
+      throw new Error('Cannot approve your own checklist item. Segregation of duties required.');
+    }
+
     const transition = transitionChecklistItem(
       item.status as ChecklistStatus,
       'approved'
@@ -195,9 +200,21 @@ export class ChecklistService {
     );
 
     if (newStatus !== renewal.status) {
+      const oldStatus = renewal.status;
       await prisma.renewal.update({
         where: { id: renewalId },
         data: { status: newStatus },
+      });
+
+      // Log renewal status change audit event
+      await prisma.auditEvent.create({
+        data: {
+          firmId,
+          action: 'renewal.status_changed',
+          entityType: 'renewal',
+          entityId: renewalId,
+          metadata: { oldStatus, newStatus },
+        },
       });
     }
   }
