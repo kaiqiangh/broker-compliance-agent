@@ -10,12 +10,76 @@ const PUBLIC_PATHS = [
   '/api/health',
 ];
 
+// Methods that don't require CSRF validation (read-only + preflight)
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+function getCsrfTokenFromCookie(request: NextRequest): string | undefined {
+  return request.cookies.get('csrf_token')?.value;
+}
+
+function getCsrfTokenFromHeader(request: NextRequest): string | undefined {
+  return request.headers.get('x-csrf-token') ?? undefined;
+}
+
+function handleCorsPreflight(request: NextRequest): NextResponse {
+  const origin = request.headers.get('origin') ?? '*';
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || origin;
+
+  const response = new NextResponse(null, { status: 204 });
+  response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  response.headers.set('Access-Control-Max-Age', '86400');
+  return response;
+}
+
+function addCorsHeaders(response: NextResponse, request: NextRequest): NextResponse {
+  const origin = request.headers.get('origin');
+  if (origin) {
+    const allowedOrigin = process.env.ALLOWED_ORIGIN || origin;
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.set('Access-Control-Expose-Headers', 'Set-Cookie');
+  }
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const method = request.method.toUpperCase();
 
+  // ── CORS preflight ──────────────────────────────────────────
+  if (method === 'OPTIONS') {
+    return handleCorsPreflight(request);
+  }
+
+  // ── CSRF validation for state-changing methods ──────────────
+  if (!SAFE_METHODS.has(method)) {
+    // Skip CSRF check for auth endpoints (user hasn't got a CSRF token yet)
+    const isAuthEndpoint =
+      pathname.startsWith('/api/auth/login') ||
+      pathname.startsWith('/api/auth/register');
+
+    if (!isAuthEndpoint) {
+      const cookieToken = getCsrfTokenFromCookie(request);
+      const headerToken = getCsrfTokenFromHeader(request);
+
+      if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+        const res = NextResponse.json(
+          { error: { code: 'CSRF_ERROR', message: 'CSRF token validation failed' } },
+          { status: 403 }
+        );
+        return addCorsHeaders(res, request);
+      }
+    }
+  }
+
+  // ── Auth gate ───────────────────────────────────────────────
   // Allow public paths
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    return addCorsHeaders(res, request);
   }
 
   // Check for session cookie
@@ -28,13 +92,15 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     // Return 401 for API routes
-    return NextResponse.json(
+    const res = NextResponse.json(
       { error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } },
       { status: 401 }
     );
+    return addCorsHeaders(res, request);
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  return addCorsHeaders(res, request);
 }
 
 export const config = {

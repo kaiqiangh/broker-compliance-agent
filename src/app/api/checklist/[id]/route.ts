@@ -31,15 +31,15 @@ async function handleAction(
 
 const CompleteSchema = z.object({
   evidenceUrl: z.string().url().optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(5000).optional(),
 });
 
 const ApproveSchema = z.object({
-  comment: z.string().optional(),
+  comment: z.string().max(2000).optional(),
 });
 
 const RejectSchema = z.object({
-  reason: z.string().min(1),
+  reason: z.string().min(1).max(2000),
 });
 
 // PUT /api/checklist/[id] — complete, approve, or reject

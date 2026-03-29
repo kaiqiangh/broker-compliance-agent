@@ -142,23 +142,9 @@ export async function POST(request: Request) {
     }
   }
 
-  // 2. Always check reminders on each run (idempotent)
-  const reminderFirms = await prisma.firm.findMany({
-    where: { subscriptionStatus: 'active' },
-    select: { id: true },
-  });
-
-  let remindersScheduled = 0;
-  for (const firm of reminderFirms) {
-    remindersScheduled += await runWithFirmContext(firm.id, () =>
-      notificationService.checkAndScheduleReminders()
-    );
-  }
-
   return NextResponse.json({
     processed: results.length,
     results,
-    remindersScheduled,
     timestamp: new Date().toISOString(),
   });
 }

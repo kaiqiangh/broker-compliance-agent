@@ -83,9 +83,10 @@ export class AuditService {
     });
 
     // CSV injection prevention: prefix formula-triggering characters with single quote
+    // Covers Excel (=+-@) and LibreOffice Calc (=+-@|!\t\r) formula triggers
     const sanitizeCell = (v: string) => {
       const trimmed = v.trim();
-      if (/^[=+\-@\t\r]/.test(trimmed)) return "'" + v;
+      if (/^[=+\-@|!\t\r]/.test(trimmed)) return "'" + v;
       return v;
     };
 

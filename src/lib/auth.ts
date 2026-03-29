@@ -46,6 +46,19 @@ export function isTokenRevoked(jti: string): boolean {
   return tokenBlocklist.has(jti);
 }
 
+// ─── CSRF token generation ──────────────────────────────────
+
+/**
+ * Generate a cryptographically random CSRF token.
+ * Used for double-submit cookie pattern.
+ */
+export function generateCsrfToken(): string {
+  // Use Web Crypto (available in Node 19+ / Edge runtime)
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─── Auth helpers ────────────────────────────────────────────
 
 export async function authenticateUser(email: string, password: string): Promise<SessionUser | null> {

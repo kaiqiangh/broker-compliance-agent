@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(10).regex(
+  newPassword: z.string().min(10).max(128).regex(
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
     'Password must contain at least one lowercase letter, one uppercase letter, and one digit'
   ),
