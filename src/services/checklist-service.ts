@@ -52,6 +52,20 @@ export class ChecklistService {
       },
     });
 
+    // Notify compliance officers when item enters pending_review
+    if (targetStatus === 'pending_review') {
+      await prisma.auditEvent.create({
+        data: {
+          firmId,
+          actorId: completedBy,
+          action: 'checklist.item_pending_review',
+          entityType: 'checklist_item',
+          entityId: itemId,
+          metadata: { itemType: item.itemType, renewalId: item.renewalId },
+        },
+      });
+    }
+
     return updated;
   }
 
