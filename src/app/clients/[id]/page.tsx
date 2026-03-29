@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
 
 interface Policy {
   id: string;
@@ -34,7 +35,7 @@ export default function ClientDetailPage() {
   useEffect(() => {
     async function loadClient() {
       try {
-        const res = await fetch(`/api/clients/${clientId}`);
+        const res = await apiFetch(`/api/clients/${clientId}`);
         if (!res.ok) {
           if (res.status === 401) { window.location.href = '/login'; return; }
           if (res.status === 404) { setClient(null); return; }

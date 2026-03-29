@@ -1,5 +1,7 @@
 'use client';
 
+
+import { apiFetch } from '@/lib/api-client';
 import { useEffect, useState } from 'react';
 
 interface Client {
@@ -24,7 +26,7 @@ export default function ClientsPage() {
         const params = new URLSearchParams();
         if (search) params.set('q', search);
 
-        const res = await fetch(`/api/clients?${params}`);
+        const res = await apiFetch(`/api/clients?${params}`);
         if (!res.ok) {
           if (res.status === 401) { window.location.href = '/login'; return; }
           throw new Error('Failed to load clients');

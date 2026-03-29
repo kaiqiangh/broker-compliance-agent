@@ -1,5 +1,7 @@
 'use client';
 
+
+import { apiFetch } from '@/lib/api-client';
 import { useEffect, useState } from 'react';
 
 interface FirmData {
@@ -88,7 +90,7 @@ export default function SettingsPage() {
 
     setPwLoading(true);
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await apiFetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),

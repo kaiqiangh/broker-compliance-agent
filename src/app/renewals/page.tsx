@@ -1,5 +1,7 @@
 'use client';
 
+
+import { apiFetch } from '@/lib/api-client';
 import { useEffect, useState } from 'react';
 
 interface Renewal {
@@ -31,7 +33,7 @@ export default function RenewalsPage() {
         if (statusFilter) params.set('status', statusFilter);
         if (typeFilter) params.set('type', typeFilter);
 
-        const res = await fetch(`/api/renewals?${params}`);
+        const res = await apiFetch(`/api/renewals?${params}`);
         if (!res.ok) {
           if (res.status === 401) { window.location.href = '/login'; return; }
           throw new Error('Failed to load renewals');

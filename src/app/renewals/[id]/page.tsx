@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
 
 interface ChecklistItem {
   id: string;
@@ -113,7 +114,7 @@ export default function ChecklistPage() {
 
   async function loadChecklist() {
     try {
-      const res = await fetch(`/api/renewals/${renewalId}/checklist`);
+      const res = await apiFetch(`/api/renewals/${renewalId}/checklist`);
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setChecklist(data.data);
@@ -129,7 +130,7 @@ export default function ChecklistPage() {
   async function handleAction(itemId: string, action: string, extra?: Record<string, unknown>) {
     setActionLoading(itemId);
     try {
-      const res = await fetch(`/api/checklist/${itemId}`, {
+      const res = await apiFetch(`/api/checklist/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...extra }),
@@ -154,7 +155,7 @@ export default function ChecklistPage() {
       formData.append('file', file);
       formData.append('checklistItemId', itemId);
 
-      const uploadRes = await fetch('/api/upload', {
+      const uploadRes = await apiFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -340,7 +341,7 @@ export default function ChecklistPage() {
           <button
             onClick={async () => {
               try {
-                const res = await fetch('/api/documents', {
+                const res = await apiFetch('/api/documents', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ renewalId, documentType: 'renewal_notification' }),
@@ -363,7 +364,7 @@ export default function ChecklistPage() {
           <button
             onClick={async () => {
               try {
-                const res = await fetch('/api/documents', {
+                const res = await apiFetch('/api/documents', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ renewalId, documentType: 'suitability_assessment' }),
@@ -387,7 +388,7 @@ export default function ChecklistPage() {
             onClick={async () => {
               setGeneratingPdf('inspection_pack');
               try {
-                const res = await fetch('/api/documents', {
+                const res = await apiFetch('/api/documents', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ renewalId, documentType: 'inspection_pack' }),
@@ -421,7 +422,7 @@ export default function ChecklistPage() {
             onClick={async () => {
               setGeneratingPdf('renewal_notification');
               try {
-                const res = await fetch('/api/documents', {
+                const res = await apiFetch('/api/documents', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ renewalId, documentType: 'renewal_notification', format: 'pdf' }),

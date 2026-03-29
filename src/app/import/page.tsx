@@ -1,5 +1,7 @@
 'use client';
 
+
+import { apiFetch } from '@/lib/api-client';
 import { useState, useRef, useEffect } from 'react';
 
 interface PreviewResult {
@@ -95,7 +97,7 @@ export default function ImportPage() {
     if (!mappingAnalysis) return;
     setMappingSaving(true);
     try {
-      const res = await fetch('/api/import/mapping', {
+      const res = await apiFetch('/api/import/mapping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mapping: columnMapping }),
@@ -127,7 +129,7 @@ export default function ImportPage() {
       formData.append('file', file);
       formData.append('confirm', 'true');
 
-      const res = await fetch('/api/import', { method: 'POST', body: formData });
+      const res = await apiFetch('/api/import', { method: 'POST', body: formData });
       const data = await res.json();
 
       if (!res.ok) {
