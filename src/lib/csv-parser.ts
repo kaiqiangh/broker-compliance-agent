@@ -134,22 +134,33 @@ export function parseCSV(buffer: Buffer, overrideFormat?: string, delimiter?: st
   };
 }
 
+/**
+ * Sanitize a CSV cell to prevent formula injection.
+ * Prefixes cells starting with dangerous characters with a single quote.
+ */
+function sanitizeCell(value: string): string {
+  if (!value) return value;
+  const first = value.trim()[0];
+  if ('=+-@|!\t\r'.includes(first)) return "'" + value;
+  return value;
+}
+
 function mapRowToPolicy(row: Record<string, string>, format: string): ParsedPolicy | null {
   switch (format) {
     case 'applied_epic':
       return {
-        policyNumber: row['PolicyRef'] || '',
-        clientName: row['ClientName'] || '',
-        clientAddress: row['ClientAddress'] || '',
+        policyNumber: sanitizeCell(row['PolicyRef'] || ''),
+        clientName: sanitizeCell(row['ClientName'] || ''),
+        clientAddress: sanitizeCell(row['ClientAddress'] || ''),
         policyType: normalizePolicyType(row['PolicyType'] || ''),
-        insurerName: row['InsurerName'] || '',
+        insurerName: sanitizeCell(row['InsurerName'] || ''),
         inceptionDate: formatDate(row['InceptionDate'], 'DD/MM/YYYY'),
         expiryDate: formatDate(row['ExpiryDate'], 'DD/MM/YYYY'),
         premium: parsePremium(row['Premium'] || '0'),
         commission: parseCommission(row['Commission'] || ''),
         ncb: row['NCB'] !== undefined && row['NCB'] !== '' ? parseInt(row['NCB'], 10) || 0 : undefined,
-        vehicleReg: row['VehicleReg'] || undefined,
-        coverType: row['CoverType'] || undefined,
+        vehicleReg: sanitizeCell(row['VehicleReg'] || ''),
+        coverType: sanitizeCell(row['CoverType'] || ''),
       };
 
     case 'acturis': {
@@ -160,16 +171,16 @@ function mapRowToPolicy(row: Record<string, string>, format: string): ParsedPoli
         row['Postcode'],
       ].filter(Boolean);
       return {
-        policyNumber: row['PolicyNo'] || '',
-        clientName: row['InsuredName'] || '',
-        clientAddress: addressParts.join(', '),
+        policyNumber: sanitizeCell(row['PolicyNo'] || ''),
+        clientName: sanitizeCell(row['InsuredName'] || ''),
+        clientAddress: sanitizeCell(addressParts.join(', ')),
         policyType: normalizePolicyType(row['Class'] || ''),
-        insurerName: row['Insurer'] || '',
+        insurerName: sanitizeCell(row['Insurer'] || ''),
         inceptionDate: formatDate(row['EffectiveDate'], 'YYYY-MM-DD'),
         expiryDate: formatDate(row['ExpirationDate'], 'YYYY-MM-DD'),
         premium: parseFloat(row['GrossPremium'] || '0') || 0,
         commission: parseFloat(row['CommissionRate'] || '') || undefined,
-        status: row['Status'] || undefined,
+        status: sanitizeCell(row['Status'] || ''),
         claimsCount: row['Claims'] ? parseInt(row['Claims'], 10) : undefined,
       };
     }
@@ -188,11 +199,11 @@ function mapRowToPolicy(row: Record<string, string>, format: string): ParsedPoli
 
       const premiumStr = getValue('premium', 'cost', 'price', 'annual');
       return {
-        policyNumber: getValue('policy #', 'policy no', 'ref', 'number'),
-        clientName: getValue('customer name', 'client', 'name', 'insured'),
-        clientAddress: getValue('address', 'addr'),
+        policyNumber: sanitizeCell(getValue('policy #', 'policy no', 'ref', 'number')),
+        clientName: sanitizeCell(getValue('customer name', 'client', 'name', 'insured')),
+        clientAddress: sanitizeCell(getValue('address', 'addr')),
         policyType: normalizePolicyType(getValue('type', 'category', 'class', 'product')),
-        insurerName: getValue('company', 'insurer', 'provider'),
+        insurerName: sanitizeCell(getValue('company', 'insurer', 'provider')),
         inceptionDate: formatDate(getValue('start date', 'from', 'effective', 'begin'), 'DD/MM/YYYY'),
         expiryDate: formatDate(getValue('end date', 'to', 'expires', 'renewal date'), 'DD/MM/YYYY'),
         premium: parsePremium(premiumStr),
@@ -238,6 +249,14 @@ function validatePolicy(policy: ParsedPolicy, row: number): ParseResult['errors'
   }
   if (policy.premium <= 0) {
     errors.push({ row, field: 'premium', error: 'Premium must be positive', rawValue: String(policy.premium) });
+  }
+  if (policy.inceptionDate) {
+    const inception = new Date(policy.inceptionDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (inception > today) {
+      errors.push({ row, field: 'inceptionDate', error: 'Inception date cannot be in the future', rawValue: policy.inceptionDate });
+    }
   }
   if (policy.inceptionDate && policy.expiryDate) {
     const inc = new Date(policy.inceptionDate);
