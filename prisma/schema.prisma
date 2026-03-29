@@ -32,6 +32,7 @@ model Firm {
   pcfRoles          PCFRole[]
   conductTrainings  ConductTraining[]
   attestations      Attestation[]
+  cpcRules          CpcRule[]
 
   @@map("firms")
 }
@@ -322,4 +323,29 @@ model PasswordResetToken {
   @@index([token])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+// ═══ CPC RULES (ADR-004) ═══
+
+model CpcRule {
+  id               String   @id @default(uuid())
+  firmId           String   @map("firm_id")
+  ruleType         String   @map("rule_type") // checklist_item, timeline, disclosure
+  ruleId           String   @map("rule_id") // e.g., renewal_notification, suitability_assessment
+  label            String
+  description      String   @db.Text
+  requiresSignOff  Boolean  @default(false) @map("requires_sign_off")
+  evidenceRequired Boolean  @default(false) @map("evidence_required")
+  policyTypes      String[] @default(["all"]) @map("policy_types")
+  isActive         Boolean  @default(true) @map("is_active")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  firm             Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId])
+  @@index([firmId, ruleType])
+  @@unique([firmId, ruleId])
+  @@map("cpc_rules")
 }

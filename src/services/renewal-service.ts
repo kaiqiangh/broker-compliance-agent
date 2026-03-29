@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { calculateRenewalStatus, daysBetween } from '../lib/dates';
-import { CHECKLIST_DEFINITIONS } from '../lib/checklist-state';
+import { cpcRulesService } from './cpc-rules-service';
 
 export class RenewalService {
   /**
@@ -22,6 +22,9 @@ export class RenewalService {
 
     let created = 0;
 
+    // Load checklist definitions from DB (falls back to defaults if empty)
+    const checklistDefs = await cpcRulesService.getChecklistDefinitions(firmId);
+
     for (const policy of policies) {
       // Wrap renewal + checklist creation in a single transaction for atomicity
       const renewal = await prisma.$transaction(async (tx) => {
@@ -37,7 +40,7 @@ export class RenewalService {
         // Batch-create all checklist items in one query
         const now = new Date();
         await tx.checklistItem.createMany({
-          data: CHECKLIST_DEFINITIONS.map((itemDef) => {
+          data: checklistDefs.map((itemDef) => {
             const isAutoComplete = itemDef.type === 'premium_disclosure';
             return {
               firmId,

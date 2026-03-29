@@ -2,6 +2,7 @@ import { hash, compare } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { prisma, runWithFirmContext } from './prisma';
 import { hasPermission, UnauthorizedError, ForbiddenError } from './rbac';
+import { cpcRulesService } from '../services/cpc-rules-service';
 import type { Permission, Role } from './rbac';
 
 // ─── Session types ───────────────────────────────────────────
@@ -149,6 +150,9 @@ export async function registerFirm(params: {
       entityId: firm.id,
     },
   });
+
+  // Seed default CPC rules for the new firm
+  await cpcRulesService.seedDefaults(firm.id);
 
   return { firmId: firm.id, user };
 }
