@@ -27,7 +27,7 @@ function getCsrfTokenFromHeader(request: NextRequest): string | undefined {
 
 function handleCorsPreflight(request: NextRequest): NextResponse {
   const origin = request.headers.get('origin') ?? '*';
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || origin;
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
 
   const response = new NextResponse(null, { status: 204 });
   response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
@@ -41,7 +41,7 @@ function handleCorsPreflight(request: NextRequest): NextResponse {
 function addCorsHeaders(response: NextResponse, request: NextRequest): NextResponse {
   const origin = request.headers.get('origin');
   if (origin) {
-    const allowedOrigin = process.env.ALLOWED_ORIGIN || origin;
+    const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
     response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Expose-Headers', 'Set-Cookie');
