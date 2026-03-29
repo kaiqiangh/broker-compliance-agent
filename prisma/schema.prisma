@@ -45,6 +45,7 @@ model User {
   role              String    @db.VarChar(50) // firm_admin, compliance_officer, adviser, read_only
   pcfRole           String?   @map("pcf_role") @db.VarChar(50)
   isActive          Boolean   @default(true) @map("is_active")
+  sessionsRevokedAt DateTime? @map("sessions_revoked_at")
   lastLoginAt       DateTime? @map("last_login_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
@@ -306,4 +307,19 @@ model Attestation {
 
   @@index([firmId])
   @@map("attestations")
+}
+
+// ═══ PASSWORD RESET TOKENS ═══
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }

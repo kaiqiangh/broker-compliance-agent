@@ -1,36 +1,42 @@
-// In-memory reset token store (shared between forgot-password and reset-password routes)
-// In production, replace with Redis or database-backed store.
-
-export const resetTokens = new Map<string, { userId: string; expires: number }>();
+import { prisma } from './prisma';
+import { randomBytes } from 'crypto';
 
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
-// Periodic cleanup of expired tokens
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, entry] of resetTokens) {
-    if (entry.expires <= now) resetTokens.delete(token);
-  }
-}, CLEANUP_INTERVAL_MS).unref();
+/**
+ * Create a password reset token and store it in the database.
+ * Returns the plaintext token to be sent in the email.
+ */
+export async function createResetToken(userId: string): Promise<string> {
+  const token = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
-export function createResetToken(userId: string): string {
-  const crypto = require('crypto');
-  const token = crypto.randomBytes(32).toString('hex');
-  resetTokens.set(token, {
-    userId,
-    expires: Date.now() + RESET_TOKEN_TTL_MS,
+  await prisma.passwordResetToken.create({
+    data: { token, userId, expiresAt },
   });
+
   return token;
 }
 
-export function consumeResetToken(token: string): string | null {
-  const entry = resetTokens.get(token);
-  if (!entry) return null;
-  if (entry.expires <= Date.now()) {
-    resetTokens.delete(token);
-    return null;
-  }
-  resetTokens.delete(token);
-  return entry.userId;
+/**
+ * Consume a password reset token.
+ * Marks it as used to prevent reuse (race-condition safe via find + update).
+ * Returns the userId if valid, null otherwise.
+ */
+export async function consumeResetToken(token: string): Promise<string | null> {
+  const resetToken = await prisma.passwordResetToken.findUnique({
+    where: { token },
+  });
+
+  if (!resetToken) return null;
+  if (resetToken.used) return null;
+  if (resetToken.expiresAt <= new Date()) return null;
+
+  // Mark as used — even if concurrent requests race, the second will see used=true
+  await prisma.passwordResetToken.update({
+    where: { id: resetToken.id },
+    data: { used: true },
+  });
+
+  return resetToken.userId;
 }
