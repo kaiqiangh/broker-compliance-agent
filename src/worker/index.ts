@@ -3,8 +3,7 @@ import { NotificationService } from '../services/notification-service';
 import { DocumentService } from '../services/document-service';
 import { InspectionPackService } from '../services/inspection-pack-service';
 import { htmlToPdf } from '../lib/pdf';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { getStorage, buildStoragePath } from '../lib/storage';
 
 export const POLL_INTERVAL_MS = 30_000; // 30 seconds
 export const RETRY_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes base
@@ -135,14 +134,11 @@ async function executeJob(jobType: string, payload: any) {
       // Convert to PDF
       const pdfBuffer = await htmlToPdf(result.html);
 
-      // Store PDF locally
-      const uploadDir = path.join(process.cwd(), 'uploads', firmId, renewalId);
-      await fs.mkdir(uploadDir, { recursive: true });
+      // Store PDF via storage abstraction
       const fileName = `${documentType}.pdf`;
-      const filePath = path.join(uploadDir, fileName);
-      await fs.writeFile(filePath, pdfBuffer);
-
-      const fileUrl = `/api/files/${firmId}/${renewalId}/${fileName}`;
+      const storagePath = buildStoragePath(firmId, renewalId, fileName);
+      const storage = getStorage();
+      const fileUrl = await storage.upload(storagePath, pdfBuffer, 'application/pdf');
 
       // Update document record
       await prisma.document.update({
@@ -175,14 +171,11 @@ async function executeJob(jobType: string, payload: any) {
         ? await inspectionPackService.generateFilteredPack(firmId, { dateFrom, dateTo, policyType, adviserId }, generatedBy)
         : await inspectionPackService.generatePack(firmId, renewalId, generatedBy);
 
-      // Store ZIP locally
-      const uploadDir = path.join(process.cwd(), 'uploads', firmId, renewalId);
-      await fs.mkdir(uploadDir, { recursive: true });
+      // Store ZIP via storage abstraction
       const fileName = pack.fileName;
-      const filePath = path.join(uploadDir, fileName);
-      await fs.writeFile(filePath, pack.buffer);
-
-      const fileUrl = `/api/files/${firmId}/${renewalId}/${fileName}`;
+      const storagePath = buildStoragePath(firmId, renewalId, fileName);
+      const storage = getStorage();
+      const fileUrl = await storage.upload(storagePath, pack.buffer, 'application/zip');
 
       // Update document record
       await prisma.document.update({

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getStorage, buildStoragePath } from '@/lib/storage';
 import path from 'path';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -132,20 +133,16 @@ export const POST = withAuth('complete_items', async (user, request) => {
     return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Checklist item not found' } }, { status: 404 });
   }
 
-  // Store file to disk (in production: upload to S3/R2)
+  // Store file
   const fileHash = Buffer.from(
     await crypto.subtle.digest('SHA-256', buffer)
   ).toString('hex').slice(0, 16);
 
   const safeName = sanitizeFileName(file.name);
-  const fileName = `${user.firmId}/${checklistItemId}/${fileHash}-${safeName}`;
-  const fileUrl = `/api/files/${fileName}`; // Authenticated file serving route
+  const storagePath = buildStoragePath(user.firmId, checklistItemId, `${fileHash}-${safeName}`);
 
-  // Write to local filesystem (production: replace with S3/R2)
-  const fs = await import('fs/promises');
-  const uploadDir = path.join(process.cwd(), 'uploads', user.firmId, checklistItemId);
-  await fs.mkdir(uploadDir, { recursive: true });
-  await fs.writeFile(path.join(uploadDir, `${fileHash}-${safeName}`), buffer);
+  const storage = getStorage();
+  const fileUrl = await storage.upload(storagePath, buffer, file.type);
 
   // Update checklist item with evidence URL
   await prisma.checklistItem.update({

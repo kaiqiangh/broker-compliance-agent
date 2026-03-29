@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
+import { getStorage } from '@/lib/storage';
 import { readFile } from 'fs/promises';
 import { resolve, sep } from 'path';
 import { prisma } from '@/lib/prisma';
@@ -10,10 +11,10 @@ const UPLOADS_ROOT = resolve(process.cwd(), 'uploads');
 
 /**
  * Authenticated file serving route.
- * Files in the uploads directory are only accessible if:
- * 1. User is authenticated
- * 2. The file path starts with the user's firmId (prevents cross-tenant access)
- * 3. The resolved canonical path is within the uploads root (prevents traversal)
+ * - Cloud storage: redirects to the public/presigned URL
+ * - Local storage: reads from disk and returns the file
+ * In both cases, the user must be authenticated and the file path must start
+ * with the user's firmId (prevents cross-tenant access).
  */
 export const GET = withAuth('view_all', async (user, request) => {
   const url = new URL(request.url);
@@ -28,7 +29,30 @@ export const GET = withAuth('view_all', async (user, request) => {
     return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Access denied' } }, { status: 403 });
   }
 
-  // Prevent path traversal — resolve canonical path and verify it's within uploads root
+  const storage = getStorage();
+
+  // Encode filename safely for audit
+  const rawFilename = filePath.split('/').pop() || 'download';
+
+  // Log document download audit event
+  await prisma.auditEvent.create({
+    data: {
+      firmId: user.firmId,
+      actorId: user.id,
+      action: 'document.downloaded',
+      entityType: 'document',
+      entityId: filePath,
+      metadata: { fileName: rawFilename },
+    },
+  });
+
+  // Cloud storage: redirect to public URL
+  if (storage.isCloud()) {
+    const cloudUrl = storage.getUrl(filePath);
+    return NextResponse.redirect(cloudUrl);
+  }
+
+  // Local storage: read from disk
   const fullPath = resolve(UPLOADS_ROOT, filePath);
   if (!fullPath.startsWith(UPLOADS_ROOT + sep)) {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid path' } }, { status: 400 });
@@ -36,21 +60,6 @@ export const GET = withAuth('view_all', async (user, request) => {
 
   try {
     const fileBuffer = await readFile(fullPath);
-
-    // Encode filename safely
-    const rawFilename = filePath.split('/').pop() || 'download';
-
-    // Log document download audit event
-    await prisma.auditEvent.create({
-      data: {
-        firmId: user.firmId,
-        actorId: user.id,
-        action: 'document.downloaded',
-        entityType: 'document',
-        entityId: filePath,
-        metadata: { fileName: rawFilename },
-      },
-    });
 
     // Determine content type from extension
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
