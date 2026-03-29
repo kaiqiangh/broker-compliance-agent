@@ -414,8 +414,12 @@ export default function ChecklistPage() {
                   if (pollData.data?.status === 'failed') {
                     throw new Error('Pack generation failed');
                   }
+                  // After 30s of pending, likely worker not running
+                  if (i === 15 && pollData.data?.status === 'pending') {
+                    throw new Error('Pack is queued but the background worker is not running. Start it with: npm run worker');
+                  }
                 }
-                throw new Error('Pack generation timed out');
+                throw new Error('Pack generation timed out (2 min). Is the worker running? npm run worker');
               } catch (err) {
                 alert(err instanceof Error ? err.message : 'Pack generation failed');
               } finally {
