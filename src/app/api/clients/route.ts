@@ -26,7 +26,7 @@ export const POST = withAuth('import', async (user, request) => {
   const { name, email, phone, address } = body;
 
   if (!name) {
-    return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Name is required' } }, { status: 400 });
   }
 
   const client = await prisma.client.create({

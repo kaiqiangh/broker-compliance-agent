@@ -28,13 +28,13 @@ export async function PUT(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body' } }, { status: 400 });
   }
 
   const { action } = body;
 
   if (!action || typeof action !== 'string') {
-    return NextResponse.json({ error: 'Missing or invalid action field' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Missing or invalid action field' } }, { status: 400 });
   }
 
   // Route to the correct permission based on action
@@ -77,5 +77,5 @@ export async function PUT(
     })(request);
   }
 
-  return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid action' } }, { status: 400 });
 }

@@ -24,22 +24,22 @@ export const POST = withAuth('import', async (user, request) => {
   const confirm = formData.get('confirm') === 'true';
 
   if (!file) {
-    return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'No file provided' } }, { status: 400 });
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: 'File too large. Max 2MB.' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'File too large. Max 2MB.' } }, { status: 400 });
   }
 
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (ext !== 'csv' && ext !== 'tsv') {
-    return NextResponse.json({ error: 'Only CSV/TSV files accepted' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Only CSV/TSV files accepted' } }, { status: 400 });
   }
 
   // Check MIME type
   const allowedMimes = ['text/csv', 'text/plain', 'text/tab-separated-values', 'application/vnd.ms-excel'];
   if (file.type && !allowedMimes.includes(file.type)) {
-    return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid file type' } }, { status: 400 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -47,7 +47,7 @@ export const POST = withAuth('import', async (user, request) => {
   // Validate content starts with printable ASCII (not binary)
   const first100 = buffer.slice(0, 100).toString('ascii');
   if (!/^[\x20-\x7E\r\n\t,;"]/.test(first100)) {
-    return NextResponse.json({ error: 'File does not appear to be CSV content' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'File does not appear to be CSV content' } }, { status: 400 });
   }
 
   if (confirm) {

@@ -29,21 +29,31 @@ export class NotificationService {
     for (const config of REMINDER_CONFIGS) {
       // Find renewals that should receive this reminder type.
       // Use a day RANGE, not an exact day, so reminders aren't missed if worker doesn't run precisely.
-      const minDays = config.type === 'overdue' ? -999 : config.daysBeforeExpiry;
-      const maxDays = config.type === '40_day' ? 999 :
-                       config.type === '20_day' ? 40 :
-                       config.type === '7_day' ? 20 :
-                       config.type === '1_day' ? 7 : 1;
+      //
+      // 40_day: renewals due 21-40 days from now
+      // 20_day: renewals due 8-20 days from now
+      // 7_day: renewals due 2-7 days from now
+      // 1_day: renewals due tomorrow
+      // overdue: renewals past due date
+      const minDays = config.type === '40_day' ? 21 :
+                      config.type === '20_day' ? 8 :
+                      config.type === '7_day' ? 2 :
+                      config.type === '1_day' ? 1 : 0;
+      const maxDays = config.daysBeforeExpiry;
 
+      // Date range: renewals due between (now + minDays) and (now + maxDays)
       const minDate = new Date(now);
-      minDate.setDate(minDate.getDate() - maxDays);
+      minDate.setDate(minDate.getDate() + minDays);
+      minDate.setHours(0, 0, 0, 0);
+
       const maxDate = new Date(now);
-      maxDate.setDate(maxDate.getDate() - minDays);
+      maxDate.setDate(maxDate.getDate() + maxDays);
+      maxDate.setHours(23, 59, 59, 999);
 
       // For overdue: find renewals past due date
       const dateFilter = config.type === 'overdue'
         ? { dueDate: { lt: now } }
-        : { dueDate: { gt: minDate, lte: maxDate } };
+        : { dueDate: { gte: minDate, lte: maxDate } };
 
       const renewals = await prisma.renewal.findMany({
         where: {

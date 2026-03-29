@@ -54,6 +54,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid input', details: err.errors }, { status: 400 });
     }
     console.error('Register error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: { code: 'ERROR', message: 'Internal server error' } }, { status: 500 });
   }
 }

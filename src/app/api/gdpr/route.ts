@@ -8,7 +8,7 @@ export const GET = withAuth('export_audit', async (user, request) => {
   const clientId = url.searchParams.get('clientId');
 
   if (!clientId) {
-    return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'clientId required' } }, { status: 400 });
   }
 
   // Verify client belongs to firm
@@ -17,7 +17,7 @@ export const GET = withAuth('export_audit', async (user, request) => {
   });
 
   if (!client) {
-    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Client not found' } }, { status: 404 });
   }
 
   // Collect all data
@@ -89,7 +89,7 @@ export const DELETE = withAuth('admin', async (user, request) => {
   const { clientId, reason } = body;
 
   if (!clientId) {
-    return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'clientId required' } }, { status: 400 });
   }
 
   // Verify client belongs to firm
@@ -98,7 +98,7 @@ export const DELETE = withAuth('admin', async (user, request) => {
   });
 
   if (!client) {
-    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Client not found' } }, { status: 404 });
   }
 
   // Art 17(3)(b): compliance records are exempt from erasure.

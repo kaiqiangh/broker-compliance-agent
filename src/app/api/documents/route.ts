@@ -10,7 +10,7 @@ export const POST = withAuth('complete_items', async (user, request) => {
   const { renewalId, documentType } = body;
 
   if (!renewalId || !documentType) {
-    return NextResponse.json({ error: 'renewalId and documentType required' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'renewalId and documentType required' } }, { status: 400 });
   }
 
   try {

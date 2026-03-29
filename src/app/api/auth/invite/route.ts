@@ -16,7 +16,7 @@ export const POST = withAuth('invite_users', async (user, request) => {
   // Check if email already exists
   const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (existing) {
-    return NextResponse.json({ error: 'User with this email already exists' }, { status: 409 });
+    return NextResponse.json({ error: { code: 'CONFLICT', message: 'User with this email already exists' } }, { status: 409 });
   }
 
   // Generate temporary password (in production, send invite email with reset link)

@@ -19,19 +19,19 @@ export const POST = withAuth('complete_items', async (user, request) => {
   const checklistItemId = formData.get('checklistItemId') as string | null;
 
   if (!file) {
-    return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'No file provided' } }, { status: 400 });
   }
 
   if (!checklistItemId) {
-    return NextResponse.json({ error: 'Missing checklistItemId' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Missing checklistItemId' } }, { status: 400 });
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: 'File too large. Max 10MB.' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'File too large. Max 10MB.' } }, { status: 400 });
   }
 
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: 'File type not allowed' }, { status: 400 });
+    return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'File type not allowed' } }, { status: 400 });
   }
 
   // Verify checklist item belongs to user's firm
@@ -40,7 +40,7 @@ export const POST = withAuth('complete_items', async (user, request) => {
   });
 
   if (!item) {
-    return NextResponse.json({ error: 'Checklist item not found' }, { status: 404 });
+    return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Checklist item not found' } }, { status: 404 });
   }
 
   // Store file to disk (in production: upload to S3/R2)
