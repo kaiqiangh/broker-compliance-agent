@@ -22,6 +22,7 @@ export default function RenewalsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     async function loadRenewals() {
@@ -36,7 +37,19 @@ export default function RenewalsPage() {
           throw new Error('Failed to load renewals');
         }
         const data = await res.json();
-        setRenewals(data.data);
+        let filtered = data.data;
+
+        // Client-side search
+        if (search) {
+          const q = search.toLowerCase();
+          filtered = filtered.filter((r: Renewal) =>
+            r.clientName.toLowerCase().includes(q) ||
+            r.policyNumber.toLowerCase().includes(q) ||
+            r.insurerName.toLowerCase().includes(q)
+          );
+        }
+
+        setRenewals(filtered);
       } catch (err) {
         console.error(err);
       } finally {
@@ -44,7 +57,7 @@ export default function RenewalsPage() {
       }
     }
     loadRenewals();
-  }, [statusFilter, typeFilter]);
+  }, [statusFilter, typeFilter, search]);
 
   const statusColors: Record<string, { bg: string; text: string; label: string }> = {
     overdue: { bg: 'bg-red-100', text: 'text-red-800', label: 'Overdue' },
@@ -65,6 +78,13 @@ export default function RenewalsPage() {
           <p className="text-gray-500 mt-1">Manage CPC renewal compliance</p>
         </div>
         <div className="flex gap-3">
+          <input
+            type="text"
+            placeholder="Search client, policy..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-48"
+          />
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
@@ -115,7 +135,11 @@ export default function RenewalsPage() {
               {renewals.map((r) => {
                 const s = statusColors[r.status] || statusColors.pending;
                 return (
-                  <tr key={r.id} className="hover:bg-gray-50">
+                  <tr
+                    key={r.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => window.location.href = `/renewals/${r.id}`}
+                  >
                     <td className="py-3 px-4 font-medium">{r.clientName}</td>
                     <td className="py-3 px-4 font-mono text-xs text-gray-600">{r.policyNumber}</td>
                     <td className="py-3 px-4 text-sm">{r.policyType}</td>

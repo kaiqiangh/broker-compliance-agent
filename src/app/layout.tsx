@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { NavLinks } from './nav-links';
 
 export const metadata: Metadata = {
   title: 'BrokerComply',
@@ -25,11 +26,7 @@ export default function RootLayout({
                 </svg>
               </summary>
               <nav className="absolute right-0 top-12 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-48 z-50 space-y-1">
-                <a href="/dashboard" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Dashboard</a>
-                <a href="/renewals" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Renewals</a>
-                <a href="/import" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Import Data</a>
-                <a href="/audit" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Audit Trail</a>
-                <a href="/settings" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Settings</a>
+                <NavLinks mobile />
                 <hr className="my-2" />
                 <form action="/api/auth/logout" method="POST">
                   <button type="submit" className="block w-full text-left px-3 py-2 text-sm text-red-600 rounded hover:bg-red-50">Sign out</button>
@@ -46,32 +43,9 @@ export default function RootLayout({
                 <p className="text-sm text-gray-500 mt-1">Compliance Platform</p>
               </div>
               <nav className="flex-1 p-4 space-y-1">
-                <a href="/dashboard" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                  Dashboard
-                </a>
-                <a href="/renewals" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                  Renewals
-                </a>
-                <a href="/import" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                  Import Data
-                </a>
-                <a href="/audit" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                  Audit Trail
-                </a>
-                <a href="/settings" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                  Settings
-                </a>
+                <NavLinks />
               </nav>
               <div className="p-4 border-t border-gray-200">
-                <div className="flex items-center">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium" aria-hidden="true">
-                    ?
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium">Loading...</p>
-                    <p className="text-xs text-gray-500">—</p>
-                  </div>
-                </div>
                 <form action="/api/auth/logout" method="POST" className="mt-3">
                   <button type="submit" className="text-xs text-gray-500 hover:text-red-600">
                     Sign out

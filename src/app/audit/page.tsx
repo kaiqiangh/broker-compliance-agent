@@ -17,11 +17,14 @@ export default function AuditPage() {
   const [loading, setLoading] = useState(true);
   const [actionFilter, setActionFilter] = useState('');
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
-        const params = new URLSearchParams({ limit: '50' });
+        const params = new URLSearchParams({ limit: String(pageSize), offset: String(page * pageSize) });
         if (actionFilter) params.set('action', actionFilter);
 
         const res = await fetch(`/api/audit?${params}`);
@@ -36,7 +39,7 @@ export default function AuditPage() {
       }
     }
     load();
-  }, [actionFilter]);
+  }, [actionFilter, page]);
 
   function handleExport() {
     const params = new URLSearchParams({ format: 'csv' });
@@ -120,6 +123,31 @@ export default function AuditPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {total > pageSize && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={(page + 1) * pageSize >= total}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>
