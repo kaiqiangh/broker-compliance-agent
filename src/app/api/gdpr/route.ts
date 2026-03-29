@@ -103,105 +103,28 @@ export const DELETE = withAuth('admin', async (user, request) => {
     return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Client not found' } }, { status: 404 });
   }
 
-  // Art 17(3)(b): compliance records are exempt from erasure.
-  // We anonymize PII but retain compliance evidence.
-
-  const erasureTimestamp = new Date();
-
-  // 1. Anonymize client PII
-  await prisma.client.update({
-    where: { id: clientId },
+  // Enqueue erasure job — the worker handles the actual anonymization
+  await prisma.scheduledJob.create({
     data: {
-      name: '[REDACTED]',
-      email: null,
-      phone: null,
-      address: null,
-    },
-  });
-
-  // 2. Anonymize audit event metadata containing client PII
-  await prisma.$executeRaw`
-    UPDATE audit_events
-    SET metadata = jsonb_set(
-      jsonb_set(
-        jsonb_set(metadata, '{clientName}', '"[REDACTED]"'),
-        '{email}', '"[REDACTED]"'
-      ),
-      '{policyNumber}', '"[REDACTED]"'
-    )
-    WHERE firm_id = ${user.firmId}
-    AND (
-      metadata->>'clientName' = ${client.name}
-      OR metadata->>'email' = ${client.email || ''}
-    )
-  `;
-
-  // 3. Anonymize IP addresses in audit events for this client's policies
-  const clientPolicies = await prisma.policy.findMany({
-    where: { clientId, firmId: user.firmId },
-    select: { id: true },
-  });
-  const policyIds = clientPolicies.map(p => p.id);
-
-  if (policyIds.length > 0) {
-    await prisma.$executeRaw`
-      UPDATE audit_events
-      SET ip_address = '0.0.0.0'
-      WHERE firm_id = ${user.firmId}
-      AND entity_id = ANY(${policyIds})
-      AND ip_address IS NOT NULL
-    `;
-  }
-
-  // 4. Redact PII from checklist items (free-text fields that may contain client references)
-  const clientRenewals = await prisma.renewal.findMany({
-    where: { firmId: user.firmId, policy: { clientId } },
-    select: { id: true },
-  });
-  const renewalIds = clientRenewals.map(r => r.id);
-
-  if (renewalIds.length > 0) {
-    await prisma.checklistItem.updateMany({
-      where: {
+      jobType: 'gdpr_erasure',
+      payload: {
         firmId: user.firmId,
-        renewalId: { in: renewalIds },
-        OR: [
-          { notes: { not: null } },
-          { rejectionReason: { not: null } },
-          { evidenceUrl: { not: null } },
-        ],
-      },
-      data: {
-        notes: '[REDACTED — GDPR erasure]',
-        rejectionReason: '[REDACTED — GDPR erasure]',
-        evidenceUrl: '[REDACTED — GDPR erasure]',
-      },
-    });
-  }
-
-  // 5. Audit the erasure itself
-  await prisma.auditEvent.create({
-    data: {
-      firmId: user.firmId,
-      actorId: user.id,
-      action: 'gdpr.erasure_completed',
-      entityType: 'client',
-      entityId: clientId,
-      metadata: {
-        originalName: client.name,
+        clientId,
+        clientName: client.name,
+        clientEmail: client.email,
         reason: reason || 'GDPR Art 17 erasure request',
-        complianceRecordsRetained: true,
-        legalBasis: 'Art 17(3)(b) — compliance with legal obligation (CPC)',
+        actorId: user.id,
       },
+      scheduledFor: new Date(),
+      status: 'pending',
     },
   });
 
   return NextResponse.json({
     data: {
       clientId,
-      status: 'anonymized',
-      complianceRecordsRetained: true,
-      message: 'Client PII anonymized. Compliance records retained under Art 17(3)(b).',
+      status: 'erasure_queued',
+      message: 'GDPR erasure job queued. Client PII will be anonymized shortly.',
     },
   });
 });

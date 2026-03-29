@@ -148,8 +148,112 @@ async function executeJob(jobType: string, payload: any) {
       break;
     }
     case 'gdpr_erasure': {
-      // GDPR erasure placeholder
-      console.log(`[Worker] GDPR erasure: ${JSON.stringify(payload)}`);
+      const { firmId, clientId, clientName, clientEmail, reason, actorId } = payload;
+      if (!firmId || !clientId) {
+        throw new Error('gdpr_erasure requires firmId and clientId');
+      }
+
+      console.log(`[Worker] GDPR erasure for client ${clientId} in firm ${firmId}`);
+
+      // 1. Verify client exists
+      const client = await prisma.client.findFirst({
+        where: { id: clientId, firmId },
+      });
+      if (!client) {
+        throw new Error(`Client ${clientId} not found in firm ${firmId}`);
+      }
+
+      // 2. Anonymize client PII
+      await prisma.client.update({
+        where: { id: clientId },
+        data: {
+          name: '[ERASED]',
+          email: null,
+          phone: null,
+          address: null,
+        },
+      });
+
+      // 3. Anonymize audit event metadata containing client PII
+      const nameToMatch = clientName || client.name;
+      const emailToMatch = clientEmail || client.email || '';
+      await prisma.$executeRaw`
+        UPDATE audit_events
+        SET metadata = jsonb_set(
+          jsonb_set(
+            jsonb_set(metadata, '{clientName}', '"[REDACTED]"'),
+            '{email}', '"[REDACTED]"'
+          ),
+          '{policyNumber}', '"[REDACTED]"'
+        )
+        WHERE firm_id = ${firmId}
+        AND (
+          metadata->>'clientName' = ${nameToMatch}
+          OR metadata->>'email' = ${emailToMatch}
+        )
+      `;
+
+      // 4. Anonymize IP addresses in audit events for this client's policies
+      const clientPolicies = await prisma.policy.findMany({
+        where: { clientId, firmId },
+        select: { id: true },
+      });
+      const policyIds = clientPolicies.map(p => p.id);
+
+      if (policyIds.length > 0) {
+        await prisma.$executeRaw`
+          UPDATE audit_events
+          SET ip_address = '0.0.0.0'
+          WHERE firm_id = ${firmId}
+          AND entity_id = ANY(${policyIds})
+          AND ip_address IS NOT NULL
+        `;
+      }
+
+      // 5. Redact PII from checklist items (free-text fields)
+      const clientRenewals = await prisma.renewal.findMany({
+        where: { firmId, policy: { clientId } },
+        select: { id: true },
+      });
+      const renewalIds = clientRenewals.map(r => r.id);
+
+      if (renewalIds.length > 0) {
+        await prisma.checklistItem.updateMany({
+          where: {
+            firmId,
+            renewalId: { in: renewalIds },
+            OR: [
+              { notes: { not: null } },
+              { rejectionReason: { not: null } },
+              { evidenceUrl: { not: null } },
+            ],
+          },
+          data: {
+            notes: '[REDACTED — GDPR erasure]',
+            rejectionReason: '[REDACTED — GDPR erasure]',
+            evidenceUrl: '[REDACTED — GDPR erasure]',
+          },
+        });
+      }
+
+      // 6. Audit the erasure itself
+      await prisma.auditEvent.create({
+        data: {
+          firmId,
+          actorId: actorId || 'system',
+          action: 'gdpr.erasure_completed',
+          entityType: 'client',
+          entityId: clientId,
+          metadata: {
+            originalName: nameToMatch,
+            reason: reason || 'GDPR Art 17 erasure request',
+            complianceRecordsRetained: true,
+            legalBasis: 'Art 17(3)(b) — compliance with legal obligation (CPC)',
+          },
+        },
+      });
+
+      console.log(`[Worker] GDPR erasure completed for client ${clientId}`);
       break;
     }
     default:
