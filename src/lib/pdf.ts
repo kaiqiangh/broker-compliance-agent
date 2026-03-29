@@ -68,3 +68,7 @@ export async function closeBrowser(): Promise<void> {
     browserInstance = null;
   }
 }
+
+// Prevent browser leaks on process shutdown
+process.on('SIGTERM', () => { closeBrowser().catch(() => {}); });
+process.on('SIGINT', () => { closeBrowser().catch(() => {}); });
