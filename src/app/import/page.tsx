@@ -39,6 +39,7 @@ export default function ImportPage() {
   const [importResult, setImportResult] = useState<{
     imported: number; skipped: number; errors: number; needsReview: number;
   } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Mapping state
@@ -47,6 +48,7 @@ export default function ImportPage() {
   const [mappingSaving, setMappingSaving] = useState(false);
 
   async function handleFile(file: File) {
+    setSelectedFile(file);
     setFileName(file.name);
     setLoading(true);
     setError('');
@@ -118,7 +120,7 @@ export default function ImportPage() {
     setLoading(true);
 
     try {
-      const file = fileRef.current?.files?.[0];
+      const file = selectedFile;
       if (!file) {
         setError('File not found. Please re-upload.');
         setStep('upload');
