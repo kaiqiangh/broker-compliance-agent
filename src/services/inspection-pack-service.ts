@@ -419,7 +419,10 @@ export class InspectionPackService {
           fileName,
           renewalCount: renewals.length,
           fileCount: files.length,
-          filters,
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          policyType: filters.policyType,
+          adviserId: filters.adviserId,
         },
       },
     });
