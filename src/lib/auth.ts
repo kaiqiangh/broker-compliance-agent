@@ -25,25 +25,21 @@ const JWT_ISSUER = 'broker-comply';
 const SESSION_TTL = '8h';
 
 // ─── Token blocklist ─────────────────────────────────────────
-// In-memory map of revoked token JTI → expiry timestamp (ms).
-// Tokens are added on password change; expired entries are cleaned periodically.
+// Redis-backed with in-memory fallback. Tokens auto-expire via Redis TTL.
 
-const tokenBlocklist = new Map<string, number>();
-const BLOCKLIST_CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // 15 min
+import { blockToken, isTokenBlocked } from './rate-limit';
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [jti, exp] of tokenBlocklist) {
-    if (exp <= now) tokenBlocklist.delete(jti);
-  }
-}, BLOCKLIST_CLEANUP_INTERVAL_MS).unref();
-
-export function revokeToken(jti: string, exp: number): void {
-  tokenBlocklist.set(jti, exp);
+/**
+ * Revoke a token by its JTI.
+ * @param jti       Token unique identifier
+ * @param ttlSeconds  Time-to-live in seconds until the token would naturally expire
+ */
+export async function revokeToken(jti: string, ttlSeconds: number): Promise<void> {
+  await blockToken(jti, Math.max(1, ttlSeconds));
 }
 
-export function isTokenRevoked(jti: string): boolean {
-  return tokenBlocklist.has(jti);
+export async function isTokenRevoked(jti: string): Promise<boolean> {
+  return isTokenBlocked(jti);
 }
 
 // ─── CSRF token generation ──────────────────────────────────
@@ -180,7 +176,7 @@ export async function getSession(token: string): Promise<SessionUser | null> {
 
     // Check token revocation blocklist
     const jti = payload.jti ?? (payload.sub as string) + ':' + String(payload.iat);
-    if (isTokenRevoked(jti)) {
+    if (await isTokenRevoked(jti)) {
       return null;
     }
 
