@@ -6,6 +6,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    env: {
+      NEXTAUTH_SECRET: 'test-secret-for-unit-tests',
+      DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+    },
     coverage: {
       provider: 'v8',
       include: ['src/lib/**/*.ts', 'src/services/**/*.ts'],

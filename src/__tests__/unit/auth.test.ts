@@ -1,8 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   createSession,
   getSession,
 } from '../../lib/auth';
+
+// Mock prisma.user.findUnique used by getSession for session-revocation check
+vi.mock('../../lib/prisma', () => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ sessionsRevokedAt: null }),
+    },
+  },
+  runWithFirmContext: vi.fn(),
+}));
 
 describe('Session management', () => {
   const mockUser = {
