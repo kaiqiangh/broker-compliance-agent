@@ -24,7 +24,7 @@ export class RenewalService {
 
     for (const policy of policies) {
       // Wrap renewal + checklist creation in a single transaction for atomicity
-      await prisma.$transaction(async (tx) => {
+      const renewal = await prisma.$transaction(async (tx) => {
         const renewal = await tx.renewal.create({
           data: {
             firmId,
@@ -52,6 +52,19 @@ export class RenewalService {
             };
           }),
         });
+
+        return renewal;
+      });
+
+      // Log per-renewal creation audit event
+      await prisma.auditEvent.create({
+        data: {
+          firmId,
+          action: 'renewal.created',
+          entityType: 'renewal',
+          entityId: renewal.id,
+          metadata: { policyId: policy.id, dueDate: policy.expiryDate },
+        },
       });
 
       created++;

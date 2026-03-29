@@ -99,14 +99,31 @@ export class ImportService {
             existing.expiryDate.toISOString().slice(0, 10) !== policy.expiryDate;
 
           if (hasChanges) {
-            await prisma.policy.update({
-              where: { id: existing.id },
-              data: {
-                premium: policy.premium,
-                expiryDate: new Date(policy.expiryDate),
-                policyStatus: policy.status || 'active',
-                importId: importRecord.id,
-              },
+            await prisma.$transaction(async (tx) => {
+              await tx.policy.update({
+                where: { id: existing.id },
+                data: {
+                  premium: policy.premium,
+                  expiryDate: new Date(policy.expiryDate),
+                  policyStatus: policy.status || 'active',
+                  importId: importRecord.id,
+                },
+              });
+
+              await tx.auditEvent.create({
+                data: {
+                  firmId,
+                  actorId: importedBy,
+                  action: 'policy.updated',
+                  entityType: 'policy',
+                  entityId: existing.id,
+                  metadata: {
+                    matchType: 'exact_hash',
+                    premium: policy.premium,
+                    expiryDate: policy.expiryDate,
+                  },
+                },
+              });
             });
             importedCount++;
           } else {
@@ -120,14 +137,30 @@ export class ImportService {
         const byNumber = byNormalized.get(normalizedNumber);
 
         if (byNumber) {
-          await prisma.policy.update({
-            where: { id: byNumber.id },
-            data: {
-              dedupHash,
-              dedupConfidence: 0.95,
-              premium: policy.premium,
-              importId: importRecord.id,
-            },
+          await prisma.$transaction(async (tx) => {
+            await tx.policy.update({
+              where: { id: byNumber.id },
+              data: {
+                dedupHash,
+                dedupConfidence: 0.95,
+                premium: policy.premium,
+                importId: importRecord.id,
+              },
+            });
+
+            await tx.auditEvent.create({
+              data: {
+                firmId,
+                actorId: importedBy,
+                action: 'policy.updated',
+                entityType: 'policy',
+                entityId: byNumber.id,
+                metadata: {
+                  matchType: 'normalized',
+                  premium: policy.premium,
+                },
+              },
+            });
           });
           importedCount++;
           continue;
@@ -149,50 +182,69 @@ export class ImportService {
 
         if (fuzzyHit) {
           // Fuzzy match found — mark for review, don't auto-update
-          await prisma.policy.update({
-            where: { id: fuzzyHit.policy.id },
-            data: {
-              dedupConfidence: fuzzyHit.result.confidence,
-              importId: importRecord.id,
-              policyStatus: 'needs_review',
-            },
+          await prisma.$transaction(async (tx) => {
+            await tx.policy.update({
+              where: { id: fuzzyHit!.policy.id },
+              data: {
+                dedupConfidence: fuzzyHit!.result.confidence,
+                importId: importRecord.id,
+                policyStatus: 'needs_review',
+              },
+            });
+
+            await tx.auditEvent.create({
+              data: {
+                firmId,
+                actorId: importedBy,
+                action: 'policy.updated',
+                entityType: 'policy',
+                entityId: fuzzyHit!.policy.id,
+                metadata: {
+                  matchType: 'fuzzy',
+                  confidence: fuzzyHit!.result.confidence,
+                  policyStatus: 'needs_review',
+                },
+              },
+            });
           });
           needsReviewCount++;
           continue;
         }
 
-        // New policy — find or create client
-        let client = clientByName.get(policy.clientName.toLowerCase());
+        // New policy — find or create client, then create policy (atomic)
+        await prisma.$transaction(async (tx) => {
+          let client = clientByName.get(policy.clientName.toLowerCase());
 
-        if (!client) {
-          client = await prisma.client.create({
+          if (!client) {
+            client = await tx.client.create({
+              data: {
+                firmId,
+                name: policy.clientName,
+                address: policy.clientAddress || null,
+              },
+            });
+            clientByName.set(policy.clientName.toLowerCase(), client);
+          }
+
+          await tx.policy.create({
             data: {
               firmId,
-              name: policy.clientName,
-              address: policy.clientAddress || null,
+              clientId: client.id,
+              policyNumber: policy.policyNumber,
+              policyNumberNormalized: normalizedNumber,
+              policyType: policy.policyType,
+              insurerName: policy.insurerName,
+              inceptionDate: new Date(policy.inceptionDate),
+              expiryDate: new Date(policy.expiryDate),
+              premium: policy.premium,
+              commissionRate: policy.commission ?? null,
+              ncb: policy.ncb ?? null,
+              policyStatus: policy.status || 'active',
+              dedupHash,
+              dedupConfidence: 1.0,
+              importId: importRecord.id,
             },
           });
-          clientByName.set(policy.clientName.toLowerCase(), client);
-        }
-
-        await prisma.policy.create({
-          data: {
-            firmId,
-            clientId: client.id,
-            policyNumber: policy.policyNumber,
-            policyNumberNormalized: normalizedNumber,
-            policyType: policy.policyType,
-            insurerName: policy.insurerName,
-            inceptionDate: new Date(policy.inceptionDate),
-            expiryDate: new Date(policy.expiryDate),
-            premium: policy.premium,
-            commissionRate: policy.commission ?? null,
-            ncb: policy.ncb ?? null,
-            policyStatus: policy.status || 'active',
-            dedupHash,
-            dedupConfidence: 1.0,
-            importId: importRecord.id,
-          },
         });
         importedCount++;
       } catch (err) {
