@@ -3,13 +3,14 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { DocumentService } from '@/services/document-service';
+import { htmlToPdf } from '@/lib/pdf';
 import { prisma } from '@/lib/prisma';
 
 const documentService = new DocumentService();
 
 export const POST = withAuth('complete_items', async (user, request) => {
   const body = await request.json();
-  const { renewalId, documentType } = body;
+  const { renewalId, documentType, format } = body;
 
   if (!renewalId || !documentType) {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'renewalId and documentType required' } }, { status: 400 });
@@ -23,6 +24,18 @@ export const POST = withAuth('complete_items', async (user, request) => {
       user.id
     );
 
+    // PDF output
+    if (format === 'pdf') {
+      const pdfBuffer = await htmlToPdf(result.html);
+      return new Response(new Uint8Array(pdfBuffer), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${documentType}-${renewalId.slice(0, 8)}.pdf"`,
+        },
+      });
+    }
+
+    // HTML output (default)
     return NextResponse.json({
       data: {
         documentId: result.id,

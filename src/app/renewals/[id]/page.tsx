@@ -51,6 +51,7 @@ export default function ChecklistPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({});
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   async function loadChecklist() {
     try {
@@ -265,6 +266,34 @@ export default function ChecklistPage() {
             className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
             🖨️ Print
+          </button>
+          <button
+            onClick={async () => {
+              setGeneratingPdf('renewal_notification');
+              try {
+                const res = await fetch('/api/documents', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ renewalId, documentType: 'renewal_notification', format: 'pdf' }),
+                });
+                if (!res.ok) throw new Error('PDF generation failed');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `renewal-notification-${renewalId.slice(0, 8)}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'PDF generation failed');
+              } finally {
+                setGeneratingPdf(null);
+              }
+            }}
+            disabled={generatingPdf !== null}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+          >
+            {generatingPdf === 'renewal_notification' ? '⏳ Generating...' : '📥 Download PDF'}
           </button>
         </div>
       </div>
