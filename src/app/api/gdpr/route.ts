@@ -168,11 +168,13 @@ export const DELETE = withAuth('admin', async (user, request) => {
         OR: [
           { notes: { not: null } },
           { rejectionReason: { not: null } },
+          { evidenceUrl: { not: null } },
         ],
       },
       data: {
         notes: '[REDACTED — GDPR erasure]',
         rejectionReason: '[REDACTED — GDPR erasure]',
+        evidenceUrl: '[REDACTED — GDPR erasure]',
       },
     });
   }

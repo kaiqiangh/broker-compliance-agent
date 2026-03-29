@@ -77,6 +77,22 @@ export async function POST(request: Request) {
           results.push({ jobId: job.id, type: job.jobType, status: 'completed' });
           break;
         }
+        case 'retention_purge': {
+          // Purge audit events older than 6 years for all firms
+          const cutoff = new Date();
+          cutoff.setFullYear(cutoff.getFullYear() - 6);
+          let totalDeleted = 0;
+          const allFirms = await prisma.firm.findMany({ select: { id: true } });
+          for (const firm of allFirms) {
+            await prisma.$executeRaw`SELECT set_current_firm_id(${firm.id})`;
+            const batch = await prisma.auditEvent.deleteMany({
+              where: { firmId: firm.id, timestamp: { lt: cutoff } },
+            });
+            totalDeleted += batch.count;
+          }
+          results.push({ jobId: job.id, type: job.jobType, status: 'completed' });
+          break;
+        }
         default:
           results.push({ jobId: job.id, type: job.jobType, status: 'skipped', error: `Unknown job type: ${job.jobType}` });
       }
