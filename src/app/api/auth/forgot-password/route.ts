@@ -2,28 +2,13 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createResetToken } from '@/lib/reset-token-store';
 import { EmailService } from '@/services/email-service';
 import { z } from 'zod';
-import crypto from 'crypto';
 
 const ForgotPasswordSchema = z.object({
   email: z.string().email(),
 });
-
-// In-memory reset token store: token → { userId, expires }
-const resetTokens = new Map<string, { userId: string; expires: number }>();
-const RESET_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
-
-// Periodic cleanup of expired tokens
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, entry] of resetTokens) {
-    if (entry.expires <= now) resetTokens.delete(token);
-  }
-}, CLEANUP_INTERVAL_MS).unref();
-
-export { resetTokens };
 
 export async function POST(request: Request) {
   try {
@@ -36,12 +21,7 @@ export async function POST(request: Request) {
     });
 
     if (user) {
-      const token = crypto.randomBytes(32).toString('hex');
-      resetTokens.set(token, {
-        userId: user.id,
-        expires: Date.now() + RESET_TOKEN_TTL_MS,
-      });
-
+      const token = createResetToken(user.id);
       const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 

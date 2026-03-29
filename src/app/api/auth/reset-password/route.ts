@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { revokeToken } from '@/lib/auth';
 import { z } from 'zod';
 import { hash } from 'bcryptjs';
-import { resetTokens } from '../forgot-password/route';
+import { consumeResetToken } from '@/lib/reset-token-store';
 
 const ResetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -20,10 +20,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { token, newPassword } = ResetPasswordSchema.parse(body);
 
-    const entry = resetTokens.get(token);
-    if (!entry || entry.expires <= Date.now()) {
-      // Clean up expired token
-      if (entry) resetTokens.delete(token);
+    const userId = consumeResetToken(token);
+    if (!userId) {
       return NextResponse.json(
         { error: { code: 'INVALID_TOKEN', message: 'Invalid or expired reset token' } },
         { status: 400 }
@@ -33,17 +31,14 @@ export async function POST(request: Request) {
     // Hash new password and update user
     const passwordHash = await hash(newPassword, 12);
     await prisma.user.update({
-      where: { id: entry.userId },
+      where: { id: userId },
       data: { passwordHash },
     });
-
-    // Delete used token
-    resetTokens.delete(token);
 
     // Revoke all existing sessions for this user by adding their JTI to the blocklist.
     // Since JWTs are stateless and use sub + iat as JTI, we can't enumerate all tokens.
     // Instead, we store a "revoke all tokens issued before this timestamp" marker.
-    revokeToken(`user:${entry.userId}:all`, Date.now() + 8 * 60 * 60 * 1000);
+    revokeToken(`user:${userId}:all`, Date.now() + 8 * 60 * 60 * 1000);
 
     return NextResponse.json({ message: 'Password has been reset successfully.' });
   } catch (err) {
