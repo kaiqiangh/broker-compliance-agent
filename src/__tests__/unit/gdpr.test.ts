@@ -104,7 +104,7 @@ describe('GDPR erasure — procedure validation', () => {
     function canErase(verified: boolean, requestDate: Date): boolean {
       if (!verified) return false;
       const deadline = new Date(requestDate);
-      deadline.setDate(deadline.getDate() + 30);
+      deadline.setUTCDate(deadline.getUTCDate() + 30);
       return new Date() <= deadline;
     }
 
@@ -113,13 +113,13 @@ describe('GDPR erasure — procedure validation', () => {
   });
 
   it('30-day deadline tracking', () => {
-    const requestDate = new Date('2026-03-01');
+    const requestDate = new Date('2026-03-01T00:00:00Z');
     const deadline = new Date(requestDate);
-    deadline.setDate(deadline.getDate() + 30);
+    deadline.setUTCDate(deadline.getUTCDate() + 30);
 
     expect(deadline.toISOString().slice(0, 10)).toBe('2026-03-31');
 
-    const daysRemaining = Math.ceil((deadline.getTime() - new Date('2026-03-15').getTime()) / (1000 * 60 * 60 * 24));
+    const daysRemaining = Math.ceil((deadline.getTime() - new Date('2026-03-15T00:00:00Z').getTime()) / (1000 * 60 * 60 * 24));
     expect(daysRemaining).toBe(16);
   });
 });
