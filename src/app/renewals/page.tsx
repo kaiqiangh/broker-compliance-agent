@@ -9,7 +9,7 @@ interface Renewal {
   policyType: string;
   insurerName: string;
   dueDate: string;
-  premium: number;
+  premium: number | string;
   newPremium: number | null;
   status: string;
   checklistProgress: string;
@@ -67,8 +67,10 @@ export default function RenewalsPage() {
     pending: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Pending' },
   };
 
-  const formatPremium = (value: number) =>
-    `€${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  const formatPremium = (value: number | string) => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return `€${(isNaN(num) ? 0 : num).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  };
 
   return (
     <div className="p-8">
