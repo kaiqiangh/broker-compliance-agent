@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: renewalId } = await params;
-  return withAuth('view_all', async (user) => {
+  return withAuth('complete_items', async (user) => {
     if (!renewalId) {
       return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Missing renewal ID' } }, { status: 400 });
     }

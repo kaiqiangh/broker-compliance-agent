@@ -146,8 +146,8 @@ export class RenewalService {
   /**
    * Get dashboard summary stats
    */
-  async getDashboardStats(firmId: string) {
-    const renewals = await this.getTimeline(firmId);
+  async getDashboardStats(firmId: string, adviserId?: string) {
+    const renewals = await this.getTimeline(firmId, { adviserId });
 
     // Current quarter filter for compliance score
     const now = new Date();
