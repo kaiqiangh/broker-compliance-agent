@@ -50,7 +50,7 @@ model User {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  firm              Firm      @relation(fields: [firmId], references: [id])
+  firm              Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
   advisedPolicies   Policy[]  @relation("PolicyAdviser")
 
   @@index([firmId])
@@ -70,7 +70,7 @@ model Client {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  firm      Firm     @relation(fields: [firmId], references: [id])
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
   policies  Policy[]
 
   @@index([firmId])
@@ -98,9 +98,9 @@ model Policy {
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  firm                  Firm      @relation(fields: [firmId], references: [id])
-  client                Client    @relation(fields: [clientId], references: [id])
-  adviser               User?     @relation("PolicyAdviser", fields: [adviserId], references: [id])
+  firm                  Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  client                Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adviser               User?     @relation("PolicyAdviser", fields: [adviserId], references: [id], onDelete: SetNull)
   renewals              Renewal[]
 
   @@index([firmId])
@@ -124,8 +124,8 @@ model Renewal {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  firm        Firm              @relation(fields: [firmId], references: [id])
-  policy      Policy            @relation(fields: [policyId], references: [id])
+  firm        Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  policy      Policy            @relation(fields: [policyId], references: [id], onDelete: Cascade)
   checklistItems ChecklistItem[]
   documents   Document[]
   notifications Notification[]
@@ -153,8 +153,8 @@ model ChecklistItem {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  firm           Firm      @relation(fields: [firmId], references: [id])
-  renewal        Renewal   @relation(fields: [renewalId], references: [id])
+  firm           Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  renewal        Renewal   @relation(fields: [renewalId], references: [id], onDelete: Cascade)
 
   @@index([renewalId])
   @@index([status])
@@ -174,8 +174,8 @@ model Document {
   cpcVersion   String    @default("2012") @map("cpc_version")
   createdAt    DateTime  @default(now()) @map("created_at")
 
-  firm         Firm      @relation(fields: [firmId], references: [id])
-  renewal      Renewal?  @relation(fields: [renewalId], references: [id])
+  firm         Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  renewal      Renewal?  @relation(fields: [renewalId], references: [id], onDelete: SetNull)
 
   @@index([firmId])
   @@index([renewalId])
@@ -197,7 +197,7 @@ model Import {
   importedBy    String?  @map("imported_by")
   importedAt    DateTime @default(now()) @map("imported_at")
 
-  firm          Firm     @relation(fields: [firmId], references: [id])
+  firm          Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
 
   @@index([firmId])
   @@map("imports")
@@ -216,7 +216,7 @@ model AuditEvent {
   metadata   Json     @default("{}")
   ipAddress  String?  @map("ip_address")
 
-  firm       Firm     @relation(fields: [firmId], references: [id])
+  firm       Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
 
   @@index([firmId, timestamp(sort: Desc)])
   @@index([entityType, entityId])
@@ -234,8 +234,8 @@ model Notification {
   sentTo       String    @map("sent_to")
   sentAt       DateTime  @default(now()) @map("sent_at")
 
-  firm         Firm      @relation(fields: [firmId], references: [id])
-  renewal      Renewal?  @relation(fields: [renewalId], references: [id])
+  firm         Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  renewal      Renewal?  @relation(fields: [renewalId], references: [id], onDelete: SetNull)
 
   @@unique([renewalId, reminderType])
   @@index([firmId])
@@ -271,7 +271,7 @@ model PCFRole {
   nextConfirmationDate DateTime? @map("next_confirmation_date")
   createdAt            DateTime  @default(now()) @map("created_at")
 
-  firm                 Firm      @relation(fields: [firmId], references: [id])
+  firm                 Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
 
   @@index([firmId])
   @@map("pcf_roles")
@@ -287,7 +287,7 @@ model ConductTraining {
   score        Int?
   evidenceUrl  String?   @map("evidence_url")
 
-  firm         Firm      @relation(fields: [firmId], references: [id])
+  firm         Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
 
   @@index([firmId])
   @@map("conduct_trainings")
@@ -303,7 +303,7 @@ model Attestation {
   status      String    @default("pending")
   signedBy    String?   @map("signed_by")
 
-  firm        Firm      @relation(fields: [firmId], references: [id])
+  firm        Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
 
   @@index([firmId])
   @@map("attestations")
