@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { NotificationService } from '../services/notification-service';
 import { DocumentService } from '../services/document-service';
+import { InspectionPackService } from '../services/inspection-pack-service';
 import { htmlToPdf } from '../lib/pdf';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -153,6 +154,46 @@ async function executeJob(jobType: string, payload: any) {
       });
 
       console.log(`[Worker] Document generated: ${documentType} for renewal ${renewalId} → ${fileUrl}`);
+      break;
+    }
+    case 'generate_inspection_pack': {
+      const { firmId, renewalId, documentId, generatedBy, dateFrom, dateTo, policyType, adviserId } = payload;
+      if (!firmId || !renewalId || !documentId || !generatedBy) {
+        throw new Error('generate_inspection_pack requires firmId, renewalId, documentId, generatedBy');
+      }
+
+      // Mark as generating
+      await prisma.document.update({
+        where: { id: documentId },
+        data: { status: 'generating' },
+      });
+
+      const inspectionPackService = new InspectionPackService();
+
+      const hasFilters = dateFrom || dateTo || policyType || adviserId;
+      const pack = hasFilters
+        ? await inspectionPackService.generateFilteredPack(firmId, { dateFrom, dateTo, policyType, adviserId }, generatedBy)
+        : await inspectionPackService.generatePack(firmId, renewalId, generatedBy);
+
+      // Store ZIP locally
+      const uploadDir = path.join(process.cwd(), 'uploads', firmId, renewalId);
+      await fs.mkdir(uploadDir, { recursive: true });
+      const fileName = pack.fileName;
+      const filePath = path.join(uploadDir, fileName);
+      await fs.writeFile(filePath, pack.buffer);
+
+      const fileUrl = `/api/files/${firmId}/${renewalId}/${fileName}`;
+
+      // Update document record
+      await prisma.document.update({
+        where: { id: documentId },
+        data: {
+          status: 'completed',
+          fileUrl,
+        },
+      });
+
+      console.log(`[Worker] Inspection pack generated: ${fileName} (${pack.fileCount} files) → ${fileUrl}`);
       break;
     }
     case 'gdpr_erasure': {

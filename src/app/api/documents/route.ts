@@ -19,36 +19,41 @@ export const POST = withAuth('complete_items', async (user, request) => {
   }
 
   try {
-    // Inspection pack — generates ZIP with multiple documents
+    // Inspection pack — queue async generation (Puppeteer PDF is slow)
     if (documentType === 'inspection_pack') {
-      // Support filtered packs via body params
-      const { dateFrom, dateTo, policyType, adviserId } = body;
-      const hasFilters = dateFrom || dateTo || policyType || adviserId;
+      const doc = await prisma.document.create({
+        data: {
+          firmId: user.firmId,
+          renewalId,
+          documentType: 'inspection_pack',
+          fileUrl: '',
+          generatedBy: user.id,
+          status: 'pending',
+        },
+      });
 
-      if (hasFilters) {
-        const pack = await inspectionPackService.generateFilteredPack(
-          user.firmId,
-          { dateFrom, dateTo, policyType, adviserId },
-          user.id
-        );
-        return new Response(new Uint8Array(pack.buffer), {
-          headers: {
-            'Content-Type': 'application/zip',
-            'Content-Disposition': `attachment; filename="${pack.fileName}"`,
+      await prisma.scheduledJob.create({
+        data: {
+          jobType: 'generate_inspection_pack',
+          payload: {
+            firmId: user.firmId,
+            renewalId,
+            documentId: doc.id,
+            generatedBy: user.id,
+            dateFrom: body.dateFrom || null,
+            dateTo: body.dateTo || null,
+            policyType: body.policyType || null,
+            adviserId: body.adviserId || null,
           },
-        });
-      }
+          scheduledFor: new Date(),
+        },
+      });
 
-      const pack = await inspectionPackService.generatePack(
-        user.firmId,
-        renewalId,
-        user.id
-      );
-
-      return new Response(new Uint8Array(pack.buffer), {
-        headers: {
-          'Content-Type': 'application/zip',
-          'Content-Disposition': `attachment; filename="${pack.fileName}"`,
+      return NextResponse.json({
+        data: {
+          documentId: doc.id,
+          status: 'pending',
+          message: 'Inspection pack generation queued. Poll /api/documents?documentId=' + doc.id + ' for status.',
         },
       });
     }
@@ -91,6 +96,18 @@ export const POST = withAuth('complete_items', async (user, request) => {
 export const GET = withAuth('view_all', async (user, request) => {
   const url = new URL(request.url);
   const renewalId = url.searchParams.get('renewalId');
+  const documentId = url.searchParams.get('documentId');
+
+  // Single document poll (for async generation status)
+  if (documentId) {
+    const doc = await prisma.document.findFirst({
+      where: { id: documentId, firmId: user.firmId },
+    });
+    if (!doc) {
+      return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Document not found' } }, { status: 404 });
+    }
+    return NextResponse.json({ data: doc });
+  }
 
   const documents = await prisma.document.findMany({
     where: {

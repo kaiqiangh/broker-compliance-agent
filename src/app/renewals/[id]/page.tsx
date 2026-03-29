@@ -388,19 +388,34 @@ export default function ChecklistPage() {
             onClick={async () => {
               setGeneratingPdf('inspection_pack');
               try {
+                // Queue async generation
                 const res = await apiFetch('/api/documents', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ renewalId, documentType: 'inspection_pack' }),
                 });
-                if (!res.ok) throw new Error('Pack generation failed');
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `CBI-Pack-${renewalId.slice(0, 8)}.zip`;
-                a.click();
-                URL.revokeObjectURL(url);
+                if (!res.ok) throw new Error('Failed to queue pack generation');
+                const { data } = await res.json();
+                const docId = data.documentId;
+
+                // Poll for completion (max 2 minutes)
+                for (let i = 0; i < 60; i++) {
+                  await new Promise(r => setTimeout(r, 2000));
+                  const pollRes = await apiFetch(`/api/documents?documentId=${docId}`);
+                  const pollData = await pollRes.json();
+                  if (pollData.data?.status === 'completed' && pollData.data?.fileUrl) {
+                    // Download the file
+                    const a = document.createElement('a');
+                    a.href = pollData.data.fileUrl;
+                    a.download = '';
+                    a.click();
+                    return;
+                  }
+                  if (pollData.data?.status === 'failed') {
+                    throw new Error('Pack generation failed');
+                  }
+                }
+                throw new Error('Pack generation timed out');
               } catch (err) {
                 alert(err instanceof Error ? err.message : 'Pack generation failed');
               } finally {
@@ -410,7 +425,7 @@ export default function ChecklistPage() {
             disabled={generatingPdf !== null}
             className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
           >
-            {generatingPdf === 'inspection_pack' ? '⏳ Building pack...' : '📦 CBI Inspection Pack'}
+            {generatingPdf === 'inspection_pack' ? '⏳ Building pack (up to 2 min)...' : '📦 CBI Inspection Pack'}
           </button>
           <button
             onClick={() => window.print()}
