@@ -75,9 +75,9 @@ export default function ImportPage() {
       }
 
       setImportResult({
-        imported: data.rowCount || preview.rowCount,
-        skipped: 0,
-        errors: data.errorCount || preview.errorCount,
+        imported: data.rowCount || 0,
+        skipped: data.skippedRows || 0,
+        errors: data.errorCount || 0,
       });
       setStep('complete');
     } catch (err) {
