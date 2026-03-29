@@ -12,7 +12,7 @@ export type ChecklistStatus =
   | 'rejected';
 
 const VALID_TRANSITIONS: Record<ChecklistStatus, ChecklistStatus[]> = {
-  pending: ['in_progress'],
+  pending: ['in_progress', 'completed', 'pending_review'],
   in_progress: ['completed'],
   completed: ['pending_review'],
   pending_review: ['approved', 'rejected'],

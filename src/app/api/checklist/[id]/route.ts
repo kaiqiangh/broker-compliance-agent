@@ -46,8 +46,9 @@ const RejectSchema = z.object({
 // Permission is checked per-action: complete_items for complete, sign_off for approve/reject
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: itemId } = await params;
   let body: { action?: string; [key: string]: unknown };
   try {
     body = await request.json();
@@ -67,7 +68,7 @@ export async function PUT(
       const { evidenceUrl, notes } = CompleteSchema.parse(body);
       return handleAction(() => checklistService.completeItem(
         user.firmId,
-        params.id,
+        itemId,
         user.id,
         { url: evidenceUrl, notes }
       ));
@@ -79,7 +80,7 @@ export async function PUT(
       const { comment } = ApproveSchema.parse(body);
       return handleAction(() => checklistService.approveItem(
         user.firmId,
-        params.id,
+        itemId,
         user.id,
         comment
       ));
@@ -91,7 +92,7 @@ export async function PUT(
       const { reason } = RejectSchema.parse(body);
       return handleAction(() => checklistService.rejectItem(
         user.firmId,
-        params.id,
+        itemId,
         user.id,
         reason
       ));
