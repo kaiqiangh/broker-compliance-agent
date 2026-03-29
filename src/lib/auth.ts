@@ -30,6 +30,17 @@ const SESSION_TTL = '8h';
 import { blockToken, isTokenBlocked } from './rate-limit';
 
 /**
+ * Revoke all sessions for a user by setting a "sessions revoked at" timestamp.
+ * Any JWT issued before this timestamp will be rejected.
+ */
+export async function revokeAllUserSessions(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { sessionsRevokedAt: new Date() },
+  });
+}
+
+/**
  * Revoke a token by its JTI.
  * @param jti       Token unique identifier
  * @param ttlSeconds  Time-to-live in seconds until the token would naturally expire
@@ -178,6 +189,19 @@ export async function getSession(token: string): Promise<SessionUser | null> {
     const jti = payload.jti ?? (payload.sub as string) + ':' + String(payload.iat);
     if (await isTokenRevoked(jti)) {
       return null;
+    }
+
+    // Check user-level session revocation (e.g., after password reset)
+    const dbUser = await prisma.user.findUnique({
+      where: { id: payload.sub as string },
+      select: { sessionsRevokedAt: true },
+    });
+    if (!dbUser) return null;
+    if (dbUser.sessionsRevokedAt && payload.iat) {
+      const revokedAtSec = dbUser.sessionsRevokedAt.getTime() / 1000;
+      if (payload.iat < revokedAtSec) {
+        return null; // Token issued before revocation
+      }
     }
 
     return {

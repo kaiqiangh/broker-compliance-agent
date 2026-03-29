@@ -20,9 +20,7 @@ const MAX_REGISTER_ATTEMPTS = 3;
 const REGISTER_WINDOW_MS = 60 * 1000;
 
 function getClientIp(request: Request): string {
-  return request.headers.get('x-real-ip')
-    || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || 'unknown';
+  return request.headers.get('x-real-ip') || 'unknown';
 }
 
 export async function POST(request: Request) {

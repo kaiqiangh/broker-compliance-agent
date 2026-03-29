@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { authenticateUser, createSession, generateCsrfToken } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 const LoginSchema = z.object({
@@ -17,9 +18,7 @@ const MAX_ACCOUNT_ATTEMPTS = 10;
 const ACCOUNT_WINDOW_MS = 10 * 60 * 1000;
 
 function getClientIp(request: Request): string {
-  return request.headers.get('x-real-ip')
-    || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || 'unknown';
+  return request.headers.get('x-real-ip') || 'unknown';
 }
 
 export async function POST(request: Request) {
@@ -60,6 +59,18 @@ export async function POST(request: Request) {
     // The rate limit window naturally expires after 15 minutes.
 
     const token = await createSession(user);
+
+    // Log login audit event
+    await prisma.auditEvent.create({
+      data: {
+        firmId: user.firmId,
+        actorId: user.id,
+        action: 'user.login',
+        entityType: 'user',
+        entityId: user.id,
+        metadata: { email: user.email, ipAddress: ip },
+      },
+    });
 
     const response = NextResponse.json({
       user: { id: user.id, email: user.email, name: user.name, role: user.role },

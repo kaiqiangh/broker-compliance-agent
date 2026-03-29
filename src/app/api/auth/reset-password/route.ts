@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { revokeToken } from '@/lib/auth';
+import { revokeAllUserSessions } from '@/lib/auth';
 import { z } from 'zod';
 import { hash } from 'bcryptjs';
 import { consumeResetToken } from '@/lib/reset-token-store';
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { token, newPassword } = ResetPasswordSchema.parse(body);
 
-    const userId = consumeResetToken(token);
+    const userId = await consumeResetToken(token);
     if (!userId) {
       return NextResponse.json(
         { error: { code: 'INVALID_TOKEN', message: 'Invalid or expired reset token' } },
@@ -35,9 +35,8 @@ export async function POST(request: Request) {
       data: { passwordHash },
     });
 
-    // Revoke all existing sessions for this user by adding their JTI to the blocklist.
-    // TTL = 8 hours (max session lifetime) ensures all existing tokens are blocked.
-    await revokeToken(`user:${userId}:all`, 8 * 60 * 60);
+    // Revoke all existing sessions for this user
+    await revokeAllUserSessions(userId);
 
     return NextResponse.json({ message: 'Password has been reset successfully.' });
   } catch (err) {
