@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth, createUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { EmailService } from '@/services/email-service';
 import { z } from 'zod';
 
 const InviteSchema = z.object({
@@ -33,6 +34,21 @@ export const POST = withAuth('invite_users', async (user, request) => {
     role,
   });
 
+  // Send invite email
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  const loginUrl = `${baseUrl}/login`;
+  const emailService = new EmailService();
+
+  // Look up firm name for the email
+  const firm = await prisma.firm.findUnique({ where: { id: user.firmId }, select: { name: true } });
+
+  await emailService.sendInviteEmail(email, name, {
+    loginUrl,
+    tempPassword,
+    firmName: firm?.name || 'BrokerComply',
+    invitedByName: user.name,
+  });
+
   // Audit
   await prisma.auditEvent.create({
     data: {
@@ -45,8 +61,7 @@ export const POST = withAuth('invite_users', async (user, request) => {
     },
   });
 
-  // In production: send invite email with temp password or reset link.
-  // DO NOT return tempPassword in the API response.
+  // Do NOT return tempPassword in the API response
   return NextResponse.json({
     user: { id: newUser.id, email: newUser.email, name: newUser.name, role: newUser.role },
     message: 'Invitation sent. User will receive login instructions via email.',

@@ -148,6 +148,44 @@ export class EmailService {
 </html>`;
   }
 
+  async sendInviteEmail(
+    to: string,
+    recipientName: string,
+    data: {
+      loginUrl: string;
+      tempPassword: string;
+      firmName: string;
+      invitedByName: string;
+    }
+  ) {
+    const subject = `You've been invited to ${data.firmName} on BrokerComply`;
+    const html = this.buildInviteHtml(recipientName, data);
+    return this.send({ to, subject, html });
+  }
+
+  private buildInviteHtml(recipientName: string, data: {
+    loginUrl: string;
+    tempPassword: string;
+    firmName: string;
+    invitedByName: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #2563eb;">You've been invited to BrokerComply</h2>
+  <p>Hi ${escapeHtml(recipientName)},</p>
+  <p>${escapeHtml(data.invitedByName)} has invited you to join <strong>${escapeHtml(data.firmName)}</strong> on BrokerComply.</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+    <tr><td style="padding: 8px; border: 1px solid #e5e7eb;"><strong>Temporary Password</strong></td><td style="padding: 8px; border: 1px solid #e5e7eb; font-family: monospace;">${escapeHtml(data.tempPassword)}</td></tr>
+  </table>
+  <p><a href="${data.loginUrl}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Sign in to BrokerComply</a></p>
+  <p><strong>Important:</strong> After your first login, please change your password in your account settings.</p>
+  <p style="color: #6b7280; font-size: 12px;">This is an automated message from BrokerComply.</p>
+</body>
+</html>`;
+  }
+
   private buildDigestHtml(firmName: string, renewals: Array<{
     clientName: string;
     policyNumber: string;

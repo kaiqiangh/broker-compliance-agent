@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
-export default function LoginPage() {
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -16,21 +14,19 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        setError(data.error || 'Login failed');
+        const data = await res.json();
+        setError(data.error?.message || 'Something went wrong');
         return;
       }
 
-      router.push('/dashboard');
-      router.refresh();
+      setSent(true);
     } catch {
       setError('Network error');
     } finally {
@@ -38,13 +34,34 @@ export default function LoginPage() {
     }
   }
 
+  if (sent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm text-center">
+            <h1 className="text-2xl font-bold text-gray-900">Check your email</h1>
+            <p className="text-gray-500 mt-4">
+              If an account with that email exists, we&apos;ve sent a password reset link.
+              It expires in 15 minutes.
+            </p>
+            <a href="/login" className="inline-block mt-6 text-sm text-blue-600 hover:underline">
+              Back to sign in
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">BrokerComply</h1>
-            <p className="text-gray-500 mt-2">Sign in to your compliance platform</p>
+            <h1 className="text-2xl font-bold text-gray-900">Forgot password</h1>
+            <p className="text-gray-500 mt-2">
+              Enter your email and we&apos;ll send you a reset link.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -65,22 +82,7 @@ export default function LoginPage() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="michael@obrien-insurance.ie"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="••••••••"
+                placeholder="you@example.ie"
               />
             </div>
 
@@ -89,16 +91,13 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Sending...' : 'Send reset link'}
             </button>
           </form>
 
-          <div className="mt-6 text-center space-y-2">
-            <a href="/forgot-password" className="text-sm text-blue-600 hover:underline block">
-              Forgot password?
-            </a>
-            <a href="/register" className="text-sm text-gray-500 hover:underline block">
-              Register your firm
+          <div className="mt-6 text-center">
+            <a href="/login" className="text-sm text-blue-600 hover:underline">
+              Back to sign in
             </a>
           </div>
         </div>
