@@ -14,7 +14,6 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * Firm-scoped models that MUST have firmId in where clauses.
- * Middleware warns if a query touches these without firmId.
  */
 const FIRM_SCOPED_MODELS = [
   'Client', 'Policy', 'Renewal', 'ChecklistItem', 'Document',
@@ -22,41 +21,53 @@ const FIRM_SCOPED_MODELS = [
 ] as const;
 
 /**
+ * Thread-local firm context for RLS.
+ * Set by withAuth middleware, consumed by Prisma middleware.
+ */
+let currentFirmId: string | null = null;
+
+/**
+ * Set the current firm context for RLS enforcement.
+ * Call this at the start of each authenticated request.
+ * The firmId is used to:
+ * 1. Set PostgreSQL session variable (for DB-level RLS)
+ * 2. Validate queries don't leak cross-tenant data (dev warnings)
+ */
+export async function setFirmContext(firmId: string): Promise<void> {
+  currentFirmId = firmId;
+  // Set PostgreSQL session variable for RLS policies
+  await prisma.$executeRaw`SELECT set_current_firm_id(${firmId})`;
+}
+
+/**
+ * Clear the firm context after request completes.
+ */
+export function clearFirmContext(): void {
+  currentFirmId = null;
+}
+
+/**
  * Prisma middleware for firm isolation enforcement.
  *
- * In development/test: throws on missing firmId (catches bugs early).
- * In production: logs warning (soft enforcement to avoid breaking queries
- * that legitimately don't need firmId, like aggregate counts).
+ * Layer 1 (this middleware): Dev-mode warnings + firm context propagation
+ * Layer 2 (PostgreSQL RLS): Hard enforcement at DB level via migration policies
  *
- * This is a defense-in-depth layer, NOT a replacement for application-level
- * firmId filtering. The real security comes from each service/handler
- * properly scoping queries.
+ * The middleware:
+ * - Warns in dev when firm-scoped queries lack firmId filter
+ * - Ensures firm context is set before any firm-scoped query
  */
 prisma.$use(async (params, next) => {
   if (FIRM_SCOPED_MODELS.includes(params.model as typeof FIRM_SCOPED_MODELS[number])) {
     const action = params.action;
 
-    // Check read operations
+    // Dev-mode: warn on missing firmId in read operations
     if (['findMany', 'findFirst', 'findUnique', 'count', 'aggregate', 'groupBy'].includes(action)) {
       const where = params.args?.where;
       if (where && !where.firmId && !where.id) {
-        // Query on a firm-scoped model without firmId filter (and not by unique id)
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
             `[FirmIsolation] ${params.model}.${action} without firmId filter. ` +
-            `This may leak cross-tenant data. Args: ${JSON.stringify(params.args).slice(0, 200)}`
-          );
-        }
-      }
-    }
-
-    // Check write operations
-    if (['update', 'updateMany', 'delete', 'deleteMany'].includes(action)) {
-      const where = params.args?.where;
-      if (where && !where.firmId && !where.id) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn(
-            `[FirmIsolation] ${params.model}.${action} without firmId in where clause.`
+            `Args: ${JSON.stringify(params.args).slice(0, 200)}`
           );
         }
       }

@@ -29,6 +29,7 @@ export default function RootLayout({
                 <a href="/renewals" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Renewals</a>
                 <a href="/import" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Import Data</a>
                 <a href="/audit" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Audit Trail</a>
+                <a href="/settings" className="block px-3 py-2 text-sm rounded hover:bg-gray-50">Settings</a>
                 <hr className="my-2" />
                 <form action="/api/auth/logout" method="POST">
                   <button type="submit" className="block w-full text-left px-3 py-2 text-sm text-red-600 rounded hover:bg-red-50">Sign out</button>
@@ -56,6 +57,9 @@ export default function RootLayout({
                 </a>
                 <a href="/audit" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
                   Audit Trail
+                </a>
+                <a href="/settings" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 hover:text-gray-900">
+                  Settings
                 </a>
               </nav>
               <div className="p-4 border-t border-gray-200">

@@ -1,6 +1,6 @@
 import { hash, compare } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
-import { prisma } from './prisma';
+import { prisma, setFirmContext, clearFirmContext } from './prisma';
 import { hasPermission, UnauthorizedError, ForbiddenError } from './rbac';
 import type { Permission, Role } from './rbac';
 
@@ -210,7 +210,15 @@ export function withAuth(
       const user = permission
         ? await requireAuthWithPermission(request, permission)
         : await requireAuth(request);
-      return await handler(user, request);
+
+      // Set firm context for RLS enforcement
+      await setFirmContext(user.firmId);
+
+      try {
+        return await handler(user, request);
+      } finally {
+        clearFirmContext();
+      }
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         return Response.json(
