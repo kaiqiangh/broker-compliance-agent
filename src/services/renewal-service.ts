@@ -23,34 +23,36 @@ export class RenewalService {
     let created = 0;
 
     for (const policy of policies) {
-      // Create renewal
-      const renewal = await prisma.renewal.create({
-        data: {
-          firmId,
-          policyId: policy.id,
-          dueDate: policy.expiryDate,
-          status: 'pending',
-        },
-      });
-
-      // Materialize checklist items
-      for (const itemDef of CHECKLIST_DEFINITIONS) {
-        const isAutoComplete = itemDef.type === 'premium_disclosure';
-
-        await prisma.checklistItem.create({
+      // Wrap renewal + checklist creation in a single transaction for atomicity
+      await prisma.$transaction(async (tx) => {
+        const renewal = await tx.renewal.create({
           data: {
             firmId,
-            renewalId: renewal.id,
-            itemType: itemDef.type,
-            status: isAutoComplete ? 'completed' : 'pending',
-            assignedTo: policy.adviserId || null,
-            completedBy: isAutoComplete ? null : undefined,
-            completedAt: isAutoComplete ? new Date() : undefined,
-            evidenceUrl: isAutoComplete ? 'system:premium_data' : undefined,
-            notes: isAutoComplete ? 'Auto-populated from policy data' : undefined,
+            policyId: policy.id,
+            dueDate: policy.expiryDate,
+            status: 'pending',
           },
         });
-      }
+
+        // Batch-create all checklist items in one query
+        const now = new Date();
+        await tx.checklistItem.createMany({
+          data: CHECKLIST_DEFINITIONS.map((itemDef) => {
+            const isAutoComplete = itemDef.type === 'premium_disclosure';
+            return {
+              firmId,
+              renewalId: renewal.id,
+              itemType: itemDef.type,
+              status: isAutoComplete ? 'completed' : 'pending',
+              assignedTo: policy.adviserId || null,
+              completedBy: isAutoComplete ? null : undefined,
+              completedAt: isAutoComplete ? now : undefined,
+              evidenceUrl: isAutoComplete ? 'system:premium_data' : undefined,
+              notes: isAutoComplete ? 'Auto-populated from policy data' : undefined,
+            };
+          }),
+        });
+      });
 
       created++;
     }
