@@ -20,6 +20,7 @@ interface AgentAction {
     id: string;
     subject: string;
     fromAddress: string;
+    bodyText?: string;
     receivedAt: string;
   };
 }
@@ -132,6 +133,28 @@ function ChangeSummary({
   );
 }
 
+// Email body preview (expandable)
+function EmailPreview({ bodyText }: { bodyText: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mb-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        View source email
+      </button>
+      {expanded && (
+        <div className="mt-1 p-2 bg-gray-50 rounded text-xs text-gray-600 whitespace-pre-wrap max-h-48 overflow-y-auto border">
+          {bodyText.slice(0, 2000)}
+          {bodyText.length > 2000 && '\n... (truncated)'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Action card component with inline editing and keyboard shortcuts
 function ActionCard({
   action,
@@ -182,6 +205,11 @@ function ActionCard({
           <p className="text-xs text-gray-500">{action.email.fromAddress}</p>
         </div>
       </div>
+
+      {/* Email body preview (expandable) */}
+      {action.email.bodyText && (
+        <EmailPreview bodyText={action.email.bodyText} />
+      )}
 
       {/* Changes (editable) */}
       <div className="mb-3 pl-3 border-l-2 border-gray-100">
