@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Set env var before any module load
+process.env.OPENAI_API_KEY = 'test-key-for-testing';
+
 // Mock OpenAI
 const mockCreate = vi.fn();
 vi.mock('openai', () => ({
