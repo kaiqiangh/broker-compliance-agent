@@ -118,6 +118,45 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         existingPolicy,
       });
 
+      // Step 8.5: Email threading - merge into existing action if same thread
+      if (email.threadId && actionData.type !== 'flag_for_review') {
+        const existingThreadAction = await prisma.agentAction.findFirst({
+          where: {
+            firmId,
+            email: { threadId: email.threadId },
+            status: 'pending',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (existingThreadAction) {
+          const mergedChanges = {
+            ...(existingThreadAction.changes as Record<string, any>),
+            ...(Object.keys(actionData.changes).length > 0 ? actionData.changes : {}),
+          };
+
+          await prisma.agentAction.update({
+            where: { id: existingThreadAction.id },
+            data: {
+              changes: mergedChanges,
+              reasoning: (existingThreadAction.reasoning || '') + `\n\n[Updated: ${email.subject}]`,
+            },
+          });
+
+          await prisma.incomingEmail.update({
+            where: { id: emailId },
+            data: { status: 'processed', processedAt: new Date() },
+          });
+
+          return {
+            emailId,
+            classification,
+            action: { id: existingThreadAction.id, type: actionData.type, status: 'pending', mode: 'suggestion' },
+            autoExecuted: false,
+          };
+        }
+      }
+
       // Step 9: Check execution mode
       const config = await prisma.emailIngressConfig.findUnique({
         where: { firmId },

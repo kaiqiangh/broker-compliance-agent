@@ -67,6 +67,22 @@ async function executeAction(action: any) {
           where: { id: action.entityId },
           data: updateData,
         });
+
+        // Update linked renewal if exists
+        if (changes.expiry_date) {
+          const renewal = await prisma.renewal.findFirst({
+            where: { policyId: action.entityId, status: { not: 'compliant' } },
+          });
+          if (renewal) {
+            await prisma.renewal.update({
+              where: { id: renewal.id },
+              data: {
+                dueDate: new Date(changes.expiry_date.new),
+                newPremium: changes.premium?.new || renewal.newPremium,
+              },
+            });
+          }
+        }
       }
       break;
     }
