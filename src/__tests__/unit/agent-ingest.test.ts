@@ -18,6 +18,11 @@ vi.mock('@/lib/storage', () => ({
   uploadToR2: vi.fn().mockResolvedValue('emails/firm-123/test-msg.eml'),
 }));
 
+// Mock audit log
+vi.mock('@/lib/audit', () => ({
+  auditLog: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { prisma } from '@/lib/prisma';
 
 // Helper to create a valid webhook request
