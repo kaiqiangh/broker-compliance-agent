@@ -2,6 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { decryptToken } from '@/lib/email/oauth/crypto';
 import { enqueueJob } from '@/lib/agent/queue';
 
+// Prevent concurrent polling of the same firm's mailbox
+const pollingLock = new Set<string>();
+
 /**
  * Poll OAuth-connected mailboxes for new emails.
  * Uses Gmail API or Microsoft Graph API depending on provider.
@@ -18,6 +21,13 @@ export async function pollConnectedMailboxes(): Promise<number> {
   let totalNew = 0;
 
   for (const config of configs) {
+    // Skip if already being polled by another invocation
+    const lockKey = `poll:${config.firmId}`;
+    if (pollingLock.has(lockKey)) {
+      continue;
+    }
+
+    pollingLock.add(lockKey);
     try {
       // Check if token needs refresh
       if (config.oauthExpiresAt && config.oauthExpiresAt < new Date()) {
@@ -84,6 +94,8 @@ export async function pollConnectedMailboxes(): Promise<number> {
           ...(config.errorCount >= 10 && { status: 'error' }),
         },
       });
+    } finally {
+      pollingLock.delete(lockKey);
     }
   }
 
