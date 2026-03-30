@@ -23,6 +23,7 @@ interface AgentAction {
     fromAddress: string;
     bodyText?: string;
     receivedAt: string;
+    threadId?: string;
   };
 }
 
@@ -157,6 +158,46 @@ function EmailPreview({ bodyText }: { bodyText: string }) {
 }
 
 // Action card component with inline editing and keyboard shortcuts
+function ThreadHistory({ emailId, threadId }: { emailId: string; threadId: string }) {
+  const [emails, setEmails] = useState<any[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (expanded && emails.length === 0) {
+      fetch(`/api/agent/emails?threadId=${threadId}`)
+        .then(r => r.json())
+        .then(data => setEmails(data.data || []))
+        .catch(() => {});
+    }
+  }, [expanded]);
+
+  if (emails.length <= 1) return null;
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="text-xs text-gray-500 hover:text-gray-700"
+      >
+        📧 Thread ({emails.length} emails) {expanded ? '▾' : '▸'}
+      </button>
+      {expanded && (
+        <div className="mt-1 pl-3 border-l-2 border-gray-100 space-y-1">
+          {emails.map((e, i) => (
+            <div key={e.id} className="text-xs">
+              <span className="text-gray-400">{i + 1}.</span>{' '}
+              <span className={e.id === emailId ? 'font-medium text-blue-600' : 'text-gray-600'}>
+                {e.subject}
+              </span>
+              <span className="text-gray-400"> — {e.fromAddress}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActionCard({
   action,
   onConfirm,
@@ -229,6 +270,11 @@ function ActionCard({
       {/* Reasoning */}
       {action.reasoning && (
         <p className="text-xs text-gray-400 mb-3 italic">{action.reasoning}</p>
+      )}
+
+      {/* Email thread history */}
+      {action.email?.threadId && (
+        <ThreadHistory emailId={action.email.id} threadId={action.email.threadId} />
       )}
 
       {/* Actions */}

@@ -37,11 +37,30 @@ export const GET = withAuth(null, async (user, request) => {
     );
   }
 
+  let threadEmails: any[] = [];
+  if (action.email?.threadId) {
+    threadEmails = await prisma.incomingEmail.findMany({
+      where: {
+        firmId: user.firmId,
+        threadId: action.email.threadId,
+      },
+      select: {
+        id: true,
+        subject: true,
+        fromAddress: true,
+        receivedAt: true,
+        status: true,
+      },
+      orderBy: { receivedAt: 'asc' },
+    });
+  }
+
   return NextResponse.json({
     data: {
       ...action,
       confidence: Number(action.confidence),
       matchConfidence: action.matchConfidence ? Number(action.matchConfidence) : null,
+      threadEmails,
     },
   });
 });

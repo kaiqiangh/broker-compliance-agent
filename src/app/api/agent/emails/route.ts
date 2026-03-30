@@ -8,12 +8,14 @@ export const GET = withAuth(null, async (user, request) => {
   const url = new URL(request.url);
   const status = url.searchParams.get('status');
   const category = url.searchParams.get('category');
+  const threadId = url.searchParams.get('threadId');
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
   const where: any = { firmId: user.firmId };
   if (status) where.status = status;
   if (category) where.category = category;
+  if (threadId) where.threadId = threadId;
 
   const [emails, total] = await Promise.all([
     prisma.incomingEmail.findMany({
