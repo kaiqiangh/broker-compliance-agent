@@ -148,4 +148,67 @@ describe('resensitize', () => {
     const restored = resensitize(extracted, tokens);
     expect(restored).toEqual(extracted);
   });
+
+  it('handles PII with quotes in resensitize', () => {
+    const tokens = [{ token: '{CLIENT_NAME_1}', original: 'O"Brien', type: 'name' }];
+    const data = { clientName: '{CLIENT_NAME_1}' };
+    const result = resensitize(data, tokens);
+    expect(result.clientName).toBe('O"Brien');
+  });
+
+  it('handles PII with backslashes in resensitize', () => {
+    const tokens = [{ token: '{ADDRESS_1}', original: '123 Main St\\Apt 4', type: 'address' }];
+    const data = { address: '{ADDRESS_1}' };
+    const result = resensitize(data, tokens);
+    expect(result.address).toBe('123 Main St\\Apt 4');
+  });
+
+  it('handles arrays in data', () => {
+    const tokens = [{ token: '{EMAIL_1}', original: 'a@b.com', type: 'email' }];
+    const data = { emails: ['{EMAIL_1}', 'static@test.com'] };
+    const result = resensitize(data, tokens);
+    expect(result.emails[0]).toBe('a@b.com');
+    expect(result.emails[1]).toBe('static@test.com');
+  });
+});
+
+describe('PII expanded coverage', () => {
+  it('desensitizes lowercase PPS numbers', () => {
+    const { desensitized } = desensitizePII('PPS: 1234567t');
+    expect(desensitized).toContain('{PPS_');
+    expect(desensitized).not.toContain('1234567t');
+  });
+
+  it('desensitizes uppercase PPS numbers', () => {
+    const { desensitized } = desensitizePII('PPS: 1234567T');
+    expect(desensitized).toContain('{PPS_');
+    expect(desensitized).not.toContain('1234567T');
+  });
+
+  it('desensitizes Irish vehicle registration with dash', () => {
+    const { desensitized } = desensitizePII('Vehicle: 231-D-12345');
+    expect(desensitized).toContain('{VRN_');
+  });
+
+  it('desensitizes Irish IBAN', () => {
+    const { desensitized } = desensitizePII('IBAN: IE29AIBK93115212345678');
+    expect(desensitized).toContain('{IBAN_');
+  });
+
+  it('desensitizes names in salutations', () => {
+    const { desensitized } = desensitizePII('Dear John Murphy,\nYour policy...');
+    expect(desensitized).toContain('{CLIENT_NAME_');
+    expect(desensitized).not.toContain('John Murphy');
+  });
+
+  it('desensitizes names in sign-offs', () => {
+    const { desensitized } = desensitizePII('Policy details...\nKind regards, Sarah O\'Brien');
+    expect(desensitized).toContain('{CLIENT_NAME_');
+  });
+
+  it('does not over-redact common words in salutations', () => {
+    const { desensitized } = desensitizePII('Dear Sir, Your policy is ready.');
+    // "Sir" should not be redacted as a name
+    expect(desensitized).toContain('Dear Sir');
+  });
 });

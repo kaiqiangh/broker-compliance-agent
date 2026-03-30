@@ -47,13 +47,35 @@ export function desensitizePII(text: string): DesensitizeResult {
     }
   );
 
-  // PPS numbers (7 digits + 1-2 letters)
+  // PPS numbers (7 digits + 1-2 letters, case-insensitive)
   result = result.replace(
-    /\b\d{7}[A-Z]{1,2}\b/g,
+    /\b(\d{7}[A-Za-z]{1,2})\b/g,
     (match) => {
       if (match.includes('{')) return match;
       const token = `{PPS_${++counter}}`;
       tokens.push({ token, original: match, type: 'pps' });
+      return token;
+    }
+  );
+
+  // Irish vehicle registration (e.g., 231-D-12345, 12-D-1234, 991-G-123)
+  result = result.replace(
+    /\b(\d{1,3}[-\s][A-Z]{1,2}[-\s]\d{1,6})\b/g,
+    (match) => {
+      if (match.includes('{')) return match;
+      const token = `{VRN_${++counter}}`;
+      tokens.push({ token, original: match, type: 'vrn' });
+      return token;
+    }
+  );
+
+  // IBAN (Irish format: IE + 2 check digits + 4 bank code + 14 account)
+  result = result.replace(
+    /\b(IE\d{2}[A-Z]{4}\d{14})\b/gi,
+    (match) => {
+      if (match.includes('{')) return match;
+      const token = `{IBAN_${++counter}}`;
+      tokens.push({ token, original: match, type: 'iban' });
       return token;
     }
   );
@@ -84,6 +106,32 @@ export function desensitizePII(text: string): DesensitizeResult {
     }
   );
 
+  // Names in salutations (Dear X, Hi X, Hello X, Good morning X)
+  result = result.replace(
+    /(Dear|Hi|Hello|Good morning|Good afternoon)[,\s]+([A-Z](?:[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:'[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]*)?|'[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+)(?:\s+[A-Z](?:[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:'[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]*)?|'[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+)){0,3})/gi,
+    (match, greeting, name) => {
+      if (name.includes('{')) return match;
+      // Don't replace short/common non-names
+      const skipWords = ['Sir', 'Madam', 'Team', 'All', 'Everyone', 'There'];
+      if (name.length < 3 || skipWords.includes(name)) return match;
+      const token = `{CLIENT_NAME_${++counter}}`;
+      tokens.push({ token, original: name, type: 'name' });
+      return `${greeting} ${token}`;
+    }
+  );
+
+  // Names in sign-offs (Regards X, Kind regards X, Best X, Thanks X, Sincerely X)
+  result = result.replace(
+    /(Regards|Kind regards|Best regards|Best wishes|Thanks|Thank you|Cheers|Sincerely|Yours sincerely|Yours faithfully)[,\s]+([A-Z](?:[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:'[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]*)?|'[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+)(?:\s+[A-Z](?:[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:'[a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]*)?|'[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+)){0,3})/gi,
+    (match, closing, name) => {
+      if (name.includes('{')) return match;
+      if (name.length < 3) return match;
+      const token = `{CLIENT_NAME_${++counter}}`;
+      tokens.push({ token, original: name, type: 'name' });
+      return `${closing} ${token}`;
+    }
+  );
+
   // Irish addresses — heuristic: number + street name + common suffixes
   result = result.replace(
     /(\d{1,3}[A-Za-z]?\s+[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:\s+[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Close|Court|Place|Terrace|Park|Grove|Way|Square|Crescent|Quay|Row|Hill|View|Lodge|Rise|Walk|Green|Gate|Mews)(?:,\s*[A-Z][a-z]+)*)/g,
@@ -104,10 +152,22 @@ export function resensitize(data: any, tokens: PIIToken[]): any {
 
   const tokenMap = new Map(tokens.map((t) => [t.token, t.original]));
 
-  const json = JSON.stringify(data);
-  const restored = json.replace(/\{[A-Z_]+\d+\}/g, (match) => {
-    return tokenMap.get(match) || match;
-  });
+  function replaceTokens(value: any): any {
+    if (typeof value === 'string') {
+      return value.replace(/\{[A-Z_]+\d+\}/g, (match) => tokenMap.get(match) || match);
+    }
+    if (Array.isArray(value)) {
+      return value.map(replaceTokens);
+    }
+    if (value && typeof value === 'object') {
+      const result: any = {};
+      for (const key of Object.keys(value)) {
+        result[key] = replaceTokens(value[key]);
+      }
+      return result;
+    }
+    return value;
+  }
 
-  return JSON.parse(restored);
+  return replaceTokens(data);
 }
