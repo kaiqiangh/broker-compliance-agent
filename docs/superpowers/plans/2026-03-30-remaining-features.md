@@ -2,34 +2,32 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement all remaining PRD features: OCR via markitdown, onboarding wizard, test email verification, notifications preferences, accuracy trend chart, email threading UI, insurer domain management, and connection health display.
+**Goal:** Implement all remaining PRD features: attachment OCR, onboarding wizard, test email verification, notifications preferences, accuracy trend chart, email threading UI, insurer domain management, and connection health display.
 
-**Architecture:** Use `markitdown` (Python CLI) as a subprocess for document/attachment text extraction. Frontend features in the existing Next.js app. All tasks are independent.
+**Architecture:** Pure TypeScript stack — use `tesseract.js` (OCR), `mammoth` (Word), `pdf-parse` (PDF, already installed) for attachment extraction. No Python dependency. Frontend features in the existing Next.js app.
 
-**Tech Stack:** Next.js 16, React, TypeScript, markitdown (Python CLI via child_process), Tailwind CSS
+**Tech Stack:** Next.js 16, React, TypeScript, tesseract.js, mammoth, pdf-parse, Tailwind CSS
 
 ---
 
 ## File Map
 
 ### OCR / Attachment Extraction
-- Modify: `src/lib/email/attachment-extractor.ts` (recreate — was deleted)
-- Create: `src/lib/email/markitdown.ts` — markitdown CLI wrapper
+- Create: `src/lib/email/attachment-extractor.ts` (recreate — was deleted)
+- Modify: `src/app/api/agent/ingest/route.ts` — integrate attachment processing
 - Test: `src/__tests__/unit/attachment-extractor.test.ts`
 
 ### Onboarding Wizard
 - Create: `src/app/agent/onboarding/page.tsx` — 3-step wizard
 - Modify: `src/app/agent/page.tsx` — redirect to onboarding if first visit
-- Modify: `src/app/agent/layout.tsx` — navigation
 
 ### Test Email
-- Modify: `src/app/api/agent/config/forwarding-address/route.ts` — add send test endpoint
-- Create: `src/app/api/agent/config/test-email/route.ts` — send test email + verify receipt
+- Create: `src/app/api/agent/config/test-email/route.ts` — verify receipt
 
 ### Notifications Preferences
 - Modify: `src/app/api/agent/config/route.ts` — add notification fields
 - Modify: `src/app/agent/config/page.tsx` — notifications tab
-- Modify: `prisma/schema.prisma` — add notification fields to EmailIngressConfig
+- Modify: `prisma/schema.prisma` — add notification fields
 
 ### Accuracy Trend Chart
 - Modify: `src/app/agent/metrics/page.tsx` — add trend chart
@@ -37,11 +35,9 @@
 
 ### Email Threading UI
 - Modify: `src/app/agent/page.tsx` — thread history in action cards
-- Modify: `src/app/api/agent/actions/[id]/route.ts` — include thread emails
 
 ### Insurer Domain Management
 - Modify: `src/app/agent/config/page.tsx` — domain list management
-- Modify: `src/app/api/agent/config/insurer-domains/route.ts` — add/remove domains
 
 ### Connection Health
 - Modify: `src/app/agent/config/page.tsx` — health indicator
@@ -49,75 +45,208 @@
 
 ---
 
-## Task 1: OCR via markitdown (Attachment Text Extraction)
+## Task 1: Attachment Text Extraction (Pure JS — tesseract.js + mammoth + pdf-parse)
 
-### 1.1 Install markitdown
+### 1.1 Install dependencies
 
 ```bash
-pip install 'markitdown[all]'
-# Verify
-markitdown --help
+npm install tesseract.js mammoth
+# pdf-parse already installed
 ```
 
-For the project, document in README that markitdown must be available in PATH.
+### 1.2 Create attachment extractor
 
-### 1.2 Create markitdown wrapper
-
-Create `src/lib/email/markitdown.ts`:
+Create `src/lib/email/attachment-extractor.ts`:
 
 ```typescript
-import { execFile } from 'child_process';
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
+import pdfParse from 'pdf-parse';
 
 /**
- * Convert a file buffer to text using markitdown CLI.
- * Supports: PDF, DOCX, XLSX, PPTX, Images (OCR), HTML, CSV, JSON, XML, ZIP.
+ * Extract text from an email attachment.
+ * Supports: PDF (pdf-parse), DOCX (mammoth), Images OCR (tesseract.js), HTML/text.
+ * Pure JS — no Python dependency.
  */
-export async function convertToText(
-  buffer: Buffer,
-  contentType: string
+export async function extractAttachmentText(
+  filename: string,
+  contentType: string,
+  buffer: Buffer
 ): Promise<string> {
-  // Determine file extension from content type
-  const ext = getExtension(contentType);
-  if (!ext) return '';
+  // Skip very small files (likely icons, signatures)
+  if (buffer.length < 100) return '';
 
-  // Write to temp file (markitdown CLI needs a file path)
-  const tmpPath = join(tmpdir(), `markitdown-${randomUUID()}.${ext}`);
-  
-  try {
-    await writeFile(tmpPath, buffer);
-    
-    const result = await new Promise<string>((resolve, reject) => {
-      execFile(
-        'markitdown',
-        [tmpPath],
-        { timeout: 30_000, maxBuffer: 5 * 1024 * 1024 }, // 30s timeout, 5MB max
-        (error, stdout, stderr) => {
-          if (error) {
-            // markitdown returns non-zero for unsupported formats
-            if (stderr?.includes('not supported') || stderr?.includes('No converter')) {
-              resolve(''); // Graceful — return empty
-            } else {
-              reject(new Error(`markitdown failed: ${stderr || error.message}`));
-            }
-          } else {
-            resolve(stdout);
-          }
-        }
-      );
-    });
-    
-    return result.trim();
-  } catch (err) {
-    console.error(`[markitdown] Conversion failed for ${contentType}:`, err);
-    return ''; // Graceful degradation
-  } finally {
-    // Cleanup temp file
-    await unlink(tmpPath).catch(() => {});
+  // Skip very large files (>10MB)
+  if (buffer.length > 10 * 1024 * 1024) {
+    console.warn(`[attachment-extractor] Skipping large file: ${filename} (${buffer.length} bytes)`);
+    return '';
   }
+
+  try {
+    // PDF extraction
+    if (contentType === 'application/pdf' || filename.endsWith('.pdf')) {
+      const result = await pdfParse(buffer);
+      return result.text || '';
+    }
+
+    // Word document extraction
+    if (
+      contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      filename.endsWith('.docx')
+    ) {
+      const mammoth = await import('mammoth');
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value || '';
+    }
+
+    // Image OCR
+    if (contentType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|tiff|bmp)$/i.test(filename)) {
+      return await ocrImage(buffer);
+    }
+
+    // HTML extraction
+    if (contentType === 'text/html' || filename.endsWith('.html')) {
+      return extractTextFromHtml(buffer.toString('utf-8'));
+    }
+
+    // Plain text
+    if (contentType.startsWith('text/') || /\.(txt|csv|json|xml)$/i.test(filename)) {
+      return buffer.toString('utf-8');
+    }
+
+    return '';
+  } catch (err) {
+    console.error(`[attachment-extractor] Failed to extract ${filename}:`, err);
+    return '';
+  }
+}
+
+/**
+ * OCR an image buffer using tesseract.js.
+ */
+async function ocrImage(buffer: Buffer): Promise<string> {
+  try {
+    const Tesseract = await import('tesseract.js');
+    const { data } = await Tesseract.recognize(buffer, 'eng', {
+      logger: () => {}, // Suppress logs
+    });
+    return data.text || '';
+  } catch (err) {
+    console.error('[attachment-extractor] OCR failed:', err);
+    return '';
+  }
+}
+
+/**
+ * Strip HTML tags for plain text extraction.
+ */
+function extractTextFromHtml(html: string): string {
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+```
+
+### 1.3 Integrate into ingest pipeline
+
+In `src/app/api/agent/ingest/route.ts`, after parsing the email, process attachments:
+
+```typescript
+import { extractAttachmentText } from '@/lib/email/attachment-extractor';
+
+// After email creation, process attachments:
+const attachments = parsed.attachments || [];
+for (const att of attachments) {
+  const extractedText = await extractAttachmentText(
+    att.filename || 'unknown',
+    att.contentType || 'application/octet-stream',
+    att.content
+  );
+
+  await prisma.emailAttachment.create({
+    data: {
+      emailId: email.id,
+      firmId,
+      filename: att.filename || 'unknown',
+      contentType: att.contentType || 'application/octet-stream',
+      sizeBytes: att.size || 0,
+      extractedText: extractedText || null,
+    },
+  });
+}
+```
+
+Also add attachment text to the pipeline context in `src/services/agent/pipeline.ts`:
+
+```typescript
+// In the desensitize step, include attachment text:
+const attachments = await prisma.emailAttachment.findMany({
+  where: { emailId },
+  select: { extractedText: true, filename: true },
+});
+const attachmentText = attachments
+  .filter(a => a.extractedText)
+  .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
+  .join('\n');
+
+const fullContext = bodyText + attachmentText;
+```
+
+### 1.4 Tests
+
+```typescript
+// src/__tests__/unit/attachment-extractor.test.ts
+import { describe, it, expect } from 'vitest';
+import { extractAttachmentText } from '@/lib/email/attachment-extractor';
+
+describe('Attachment extraction', () => {
+  it('returns empty for unsupported formats', async () => {
+    const text = await extractAttachmentText('file.bin', 'application/octet-stream', Buffer.from('test'));
+    expect(text).toBe('');
+  });
+
+  it('returns empty for very small files', async () => {
+    const text = await extractAttachmentText('file.pdf', 'application/pdf', Buffer.from('x'));
+    expect(text).toBe('');
+  });
+
+  it('returns empty for very large files', async () => {
+    const big = Buffer.alloc(11 * 1024 * 1024);
+    const text = await extractAttachmentText('big.pdf', 'application/pdf', big);
+    expect(text).toBe('');
+  });
+
+  it('extracts text from plain text files', async () => {
+    const text = await extractAttachmentText('notes.txt', 'text/plain', Buffer.from('Hello world'));
+    expect(text).toBe('Hello world');
+  });
+
+  it('extracts text from HTML', async () => {
+    const html = '<p>Hello <b>world</b></p>';
+    const text = await extractAttachmentText('page.html', 'text/html', Buffer.from(html));
+    expect(text).toContain('Hello world');
+  });
+
+  it('extracts text from CSV/JSON', async () => {
+    const text = await extractAttachmentText('data.json', 'application/json', Buffer.from('{"key": "value"}'));
+    expect(text).toContain('key');
+  });
+});
+```
+
+### 1.5 Commit
+
+```bash
+npm install tesseract.js mammoth
+git add src/lib/email/attachment-extractor.ts src/app/api/agent/ingest/route.ts src/services/agent/pipeline.ts src/__tests__/unit/attachment-extractor.test.ts package.json package-lock.json
+git commit -m "feat: attachment text extraction via tesseract.js (OCR), mammoth (DOCX), pdf-parse (PDF)"
+```
 }
 
 function getExtension(contentType: string): string | null {
@@ -144,11 +273,11 @@ function getExtension(contentType: string): string | null {
 }
 
 /**
- * Check if markitdown is available.
+ * Check if tesseract.js is available.
  */
 export async function isMarkitdownAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile('markitdown', ['--version'], { timeout: 5000 }, (error) => {
+    execFile('attachment-extractor', ['--version'], { timeout: 5000 }, (error) => {
       resolve(!error);
     });
   });
@@ -160,7 +289,7 @@ export async function isMarkitdownAvailable(): Promise<boolean> {
 Create `src/lib/email/attachment-extractor.ts`:
 
 ```typescript
-import { convertToText } from './markitdown';
+import { convertToText } from './attachment-extractor';
 
 export interface ExtractedAttachment {
   filename: string;
@@ -171,7 +300,7 @@ export interface ExtractedAttachment {
 
 /**
  * Extract text from an email attachment.
- * Uses markitdown for PDF, DOCX, XLSX, PPTX, images (OCR), HTML, etc.
+ * Uses attachment-extractor for PDF, DOCX, XLSX, PPTX, images (OCR), HTML, etc.
  * Falls back to empty string for unsupported formats.
  */
 export async function extractAttachmentText(
@@ -259,8 +388,8 @@ describe('Attachment extraction', () => {
 ### 1.6 Commit
 
 ```bash
-git add src/lib/email/markitdown.ts src/lib/email/attachment-extractor.ts src/app/api/agent/ingest/route.ts src/__tests__/unit/attachment-extractor.test.ts
-git commit -m "feat: attachment text extraction via markitdown (PDF, DOCX, images OCR, HTML, etc.)"
+git add src/lib/email/attachment-extractor.ts src/lib/email/attachment-extractor.ts src/app/api/agent/ingest/route.ts src/__tests__/unit/attachment-extractor.test.ts
+git commit -m "feat: attachment text extraction via attachment-extractor (PDF, DOCX, images OCR, HTML, etc.)"
 ```
 
 ---
@@ -901,7 +1030,7 @@ git commit -m "feat: connection health indicator (status, last poll, error detai
 
 | Task | Feature | Workload | Files |
 |------|---------|----------|-------|
-| 1 | OCR via markitdown | Medium | 3 files |
+| 1 | Attachment OCR (tesseract.js + mammoth) | Medium | 3 files |
 | 2 | Onboarding wizard | Medium | 2 files |
 | 3 | Test email verification | Small | 1 file |
 | 4 | Notifications preferences | Medium | 3 files + migration |
@@ -914,7 +1043,7 @@ git commit -m "feat: connection health indicator (status, last poll, error detai
 
 ## Prerequisites
 
-- `pip install 'markitdown[all]'` for Task 1 (OCR)
+- `npm install tesseract.js mammoth` for Task 1 (OCR)
 - PostgreSQL running for Tasks 4 (schema migration)
 
 ## Execution Options
