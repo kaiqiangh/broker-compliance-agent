@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { storeRawEmail } from '@/lib/email/storage';
 import { enqueueJob } from '@/lib/agent/queue';
+import { auditLog } from '@/lib/audit';
 
 interface IngestBody {
   from: string;
@@ -75,6 +76,24 @@ export async function POST(request: Request) {
       { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
       { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
     );
+  }
+
+  // Daily limit: 200 emails/firm/day (PRD §10)
+  if (firmIdFromTo) {
+    const DAILY_LIMIT = 200;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const dailyCount = await prisma.incomingEmail.count({
+      where: { firmId: firmIdFromTo, createdAt: { gte: today } },
+    });
+
+    if (dailyCount >= DAILY_LIMIT) {
+      return NextResponse.json(
+        { error: { code: 'DAILY_LIMIT_EXCEEDED', message: `Daily email limit (${DAILY_LIMIT}) reached` } },
+        { status: 429 }
+      );
+    }
   }
 
   // Verify signature against the raw email content (not the JSON wrapper)
@@ -176,6 +195,13 @@ export async function POST(request: Request) {
     }
     throw err;
   }
+
+  // Log audit event for email receipt
+  await auditLog(firmId, 'agent.email_received', 'incoming_email', email.id, {
+    fromAddress,
+    subject,
+    messageId,
+  });
 
   // Store raw email in R2 (non-blocking)
   const rawUrl = await storeRawEmail(firmId, messageId, rawEmailBuffer);
