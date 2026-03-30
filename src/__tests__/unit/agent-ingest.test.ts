@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
     },
     incomingEmail: {
+      count: vi.fn().mockResolvedValue(0),
       findFirst: vi.fn(),
       create: vi.fn(),
     },
@@ -222,5 +223,17 @@ describe('POST /api/agent/ingest', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(500);
+  });
+
+  it('returns 429 when daily email limit is exceeded', async () => {
+    (prisma.incomingEmail.count as any).mockResolvedValue(200);
+
+    const { POST } = await import('@/app/api/agent/ingest/route');
+    const req = createWebhookRequest(SAMPLE_EMAIL, 'firm-123', 'test-secret-123');
+    const res = await POST(req);
+
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error.code).toBe('DAILY_LIMIT_EXCEEDED');
   });
 });
