@@ -11,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
       count: vi.fn(),
     },
     policy: {
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -80,6 +81,7 @@ describe('PUT /api/agent/actions/:id/confirm', () => {
       changes: { premium: { old: 1000, new: 1200 } },
       status: 'confirmed',
     });
+    (prisma.policy.findFirst as any).mockResolvedValue({ id: 'p1', firmId: 'f1' });
     (prisma.policy.update as any).mockResolvedValue({});
     (prisma.agentAction.update as any).mockResolvedValue({});
 

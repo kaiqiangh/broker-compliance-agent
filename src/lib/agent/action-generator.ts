@@ -69,8 +69,12 @@ export function generateAction(input: GenerateInput): AgentActionData {
   if (matching.policy && existingPolicy) {
     const changes: Record<string, { old: any; new: any }> = {};
 
-    if (extraction.newPremium != null && extraction.newPremium !== Number(existingPolicy.premium)) {
-      changes.premium = { old: Number(existingPolicy.premium), new: extraction.newPremium };
+    const PRECISION_TOLERANCE = 0.01;
+    if (extraction.newPremium != null) {
+      const oldPremium = Number(existingPolicy.premium);
+      if (Math.abs(extraction.newPremium - oldPremium) > PRECISION_TOLERANCE) {
+        changes.premium = { old: oldPremium, new: extraction.newPremium };
+      }
     }
     if (extraction.newExpiry) {
       const newExpiry = new Date(extraction.newExpiry);

@@ -12,7 +12,7 @@ const UpdateConfigSchema = z.object({
   emailFolderFilter: z.array(z.string()).optional(),
 }).strict();
 
-export const GET = withAuth(null, async (user, _request) => {
+export const GET = withAuth('agent:view_own', async (user, _request) => {
   const config = await prisma.emailIngressConfig.findUnique({
     where: { firmId: user.firmId },
   });
@@ -35,7 +35,7 @@ export const GET = withAuth(null, async (user, _request) => {
   });
 });
 
-export const PUT = withAuth(null, async (user, request) => {
+export const PUT = withAuth('agent:configure', async (user, request) => {
   let body: z.infer<typeof UpdateConfigSchema>;
   try {
     const raw = await request.json();

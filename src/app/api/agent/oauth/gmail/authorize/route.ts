@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import { withAuth } from '@/lib/auth';
 
 const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
@@ -15,7 +16,10 @@ export const GET = withAuth(null, async (user, _request) => {
   }
 
   const redirectUri = `${process.env.APP_URL}/api/agent/oauth/gmail/callback`;
-  const state = Buffer.from(JSON.stringify({ firmId: user.firmId })).toString('base64url');
+
+  // Generate CSRF nonce and include in state
+  const nonce = randomBytes(32).toString('hex');
+  const state = Buffer.from(JSON.stringify({ firmId: user.firmId, nonce })).toString('base64url');
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -27,7 +31,18 @@ export const GET = withAuth(null, async (user, _request) => {
     state,
   });
 
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     `https://accounts.google.com/o/oauth2/v2/auth?${params}`
   );
+
+  // Store nonce in HttpOnly cookie for CSRF verification on callback
+  response.cookies.set('oauth_nonce', nonce, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: 600, // 10 minutes
+    path: '/',
+  });
+
+  return response;
 });
