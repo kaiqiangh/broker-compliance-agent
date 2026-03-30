@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
+
+const JWT_SECRET_RAW = process.env.NEXTAUTH_SECRET || '';
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
+const JWT_ISSUER = 'broker-comply';
 
 // Routes that don't require auth
 const PUBLIC_PATHS = [
@@ -12,6 +17,7 @@ const PUBLIC_PATHS = [
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/health',
+  '/api/agent/oauth',  // OAuth callbacks need to be accessible
 ];
 
 // Methods that don't require CSRF validation (read-only + preflight)
@@ -49,7 +55,16 @@ function addCorsHeaders(response: NextResponse, request: NextRequest): NextRespo
   return response;
 }
 
-export function middleware(request: NextRequest) {
+async function isValidSession(token: string): Promise<boolean> {
+  try {
+    await jwtVerify(token, JWT_SECRET, { issuer: JWT_ISSUER });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method.toUpperCase();
 
@@ -90,7 +105,7 @@ export function middleware(request: NextRequest) {
 
   // Check for session cookie
   const session = request.cookies.get('session');
-  if (!session?.value) {
+  if (!session?.value || !(await isValidSession(session.value))) {
     // Redirect to login for pages
     if (!pathname.startsWith('/api/')) {
       const loginUrl = new URL('/login', request.url);
