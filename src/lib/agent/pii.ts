@@ -69,6 +69,33 @@ export function desensitizePII(text: string): DesensitizeResult {
     }
   );
 
+  // Person names — heuristic: "client/policyholder/insured" followed by capitalized words
+  result = result.replace(
+    /(client|policyholder|insured|member|beneficiary)[\s:]+([A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:\s+(?:[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+|Ó|Mac|Mc|O'|De|Van|Van der)\w*){0,3})/gi,
+    (match, keyword, name) => {
+      if (name.includes('{')) return match;
+      // Don't replace very short "names" or common non-names
+      if (name.length < 3 || ['Ireland', 'Insurance', 'Broker', 'Policy', 'Renewal', 'Claim', 'Your', 'Dear'].includes(name)) {
+        return match;
+      }
+      const token = `{CLIENT_NAME_${++counter}}`;
+      tokens.push({ token, original: name, type: 'name' });
+      return `${keyword}: ${token}`;
+    }
+  );
+
+  // Irish addresses — heuristic: number + street name + common suffixes
+  result = result.replace(
+    /(\d{1,3}[A-Za-z]?\s+[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+(?:\s+[A-Z][a-zàáâäãåèéêëìíîïòóôöõùúûüýÿ]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Close|Court|Place|Terrace|Park|Grove|Way|Square|Crescent|Quay|Row|Hill|View|Lodge|Rise|Walk|Green|Gate|Mews)(?:,\s*[A-Z][a-z]+)*)/g,
+    (match) => {
+      if (match.includes('{')) return match;
+      if (match.length < 10) return match;
+      const token = `{ADDRESS_${++counter}}`;
+      tokens.push({ token, original: match, type: 'address' });
+      return token;
+    }
+  );
+
   return { desensitized: result, tokens };
 }
 

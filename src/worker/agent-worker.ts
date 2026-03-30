@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { processEmail } from '../services/agent/pipeline';
+import { pollConnectedMailboxes } from '../lib/email/oauth/poller';
 
 /**
  * Agent Worker - Background job processor
@@ -171,8 +172,13 @@ if (require.main === module) {
         const requeued = await detectStaleEmails();
         console.log(`Re-queued ${requeued} stale emails`);
         break;
+      case 'poll':
+        const newEmails = await pollConnectedMailboxes();
+        console.log(`Polled mailboxes: ${newEmails} new emails`);
+        break;
       case 'all':
         await detectStaleEmails();
+        await pollConnectedMailboxes();
         const processed = await processPendingEmails();
         await aggregateDailyMetrics();
         console.log(`Done: ${processed} emails processed`);
