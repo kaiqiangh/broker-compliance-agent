@@ -16,6 +16,11 @@ export async function executeAction(action: {
   switch (action.actionType) {
     case 'update_policy': {
       if (!action.entityId) break;
+      const existing = await prisma.policy.findFirst({
+        where: { id: action.entityId, firmId: action.firmId },
+      });
+      if (!existing) throw new Error(`Policy ${action.entityId} not found in firm ${action.firmId}`);
+
       const updateData = extractPolicyChanges(changes);
       if (Object.keys(updateData).length > 0) {
         await prisma.policy.update({
@@ -44,6 +49,11 @@ export async function executeAction(action: {
     case 'create_policy': {
       // entityId is the client ID for create_policy
       if (!action.entityId) break;
+      const client = await prisma.client.findFirst({
+        where: { id: action.entityId, firmId: action.firmId },
+      });
+      if (!client) throw new Error(`Client ${action.entityId} not found in firm ${action.firmId}`);
+
       await prisma.policy.create({
         data: {
           firmId: action.firmId,
@@ -67,6 +77,10 @@ export async function executeAction(action: {
 
     case 'cancel_policy': {
       if (!action.entityId) break;
+      const policy = await prisma.policy.findFirst({
+        where: { id: action.entityId, firmId: action.firmId },
+      });
+      if (!policy) throw new Error(`Policy ${action.entityId} not found in firm ${action.firmId}`);
       await prisma.policy.update({
         where: { id: action.entityId },
         data: { policyStatus: 'cancelled' },
