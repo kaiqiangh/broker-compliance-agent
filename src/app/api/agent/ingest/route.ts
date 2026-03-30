@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { simpleParser } from 'mailparser';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 interface IngestBody {
   from: string;
@@ -45,6 +46,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: { code: 'CONFIG_ERROR', message: 'Webhook secret not configured' } },
       { status: 500 }
+    );
+  }
+
+  // Rate limit: 100 emails/min per firm (extracted from recipient later, use IP as fallback)
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const ip = forwardedFor?.split(',')[0]?.trim() || 'unknown';
+  const rlKey = `agent:ingest:${ip}`;
+  const rl = await checkRateLimit(rlKey, 100, 60);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
     );
   }
 
