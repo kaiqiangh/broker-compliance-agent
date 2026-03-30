@@ -98,7 +98,42 @@ export async function resetRateLimit(key: string): Promise<void> {
   }
 }
 
-// ─── Redis implementation ────────────────────────────────────
+// ─── Redis implementation (atomic Lua script) ────────────────
+
+// Atomic Lua script for rate limiting
+// Returns: [allowed (1/0), remaining, retryAfter]
+const RATE_LIMIT_SCRIPT = `
+local key = KEYS[1]
+local maxAttempts = tonumber(ARGV[1])
+local windowMs = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local data = redis.call('HGETALL', key)
+local count = 0
+local resetAt = 0
+
+if #data > 0 then
+  for i = 1, #data, 2 do
+    if data[i] == 'count' then count = tonumber(data[i+1]) end
+    if data[i] == 'resetAt' then resetAt = tonumber(data[i+1]) end
+  end
+end
+
+if count == 0 or now > resetAt then
+  local newResetAt = now + windowMs
+  redis.call('HSET', key, 'count', '1', 'resetAt', tostring(newResetAt))
+  redis.call('PEXPIRE', key, windowMs)
+  return {1, maxAttempts - 1, 0}
+end
+
+if count >= maxAttempts then
+  local retryAfter = math.ceil((resetAt - now) / 1000)
+  return {0, 0, math.max(retryAfter, 1)}
+end
+
+redis.call('HINCRBY', key, 'count', 1)
+return {1, maxAttempts - count - 1, 0}
+`;
 
 async function checkRateLimitRedis(
   client: Redis,
@@ -107,50 +142,53 @@ async function checkRateLimitRedis(
   windowMs: number
 ): Promise<RateLimitResult> {
   try {
-    const windowSec = Math.ceil(windowMs / 1000);
     const now = Date.now();
+    const result = await client.eval(
+      RATE_LIMIT_SCRIPT,
+      1,
+      key,
+      String(maxAttempts),
+      String(windowMs),
+      String(now)
+    ) as number[];
 
-    // Use a Redis hash to track count + window start atomically
-    const multi = client.multi();
-    multi.hget(key, 'count');
-    multi.hget(key, 'resetAt');
-    const results = await multi.exec();
-
-    const count = results?.[0]?.[1] ? parseInt(results[0][1] as string, 10) : 0;
-    const resetAt = results?.[1]?.[1] ? parseInt(results[1][1] as string, 10) : 0;
-
-    if (count === 0 || now > resetAt) {
-      // New window
-      const newResetAt = now + windowMs;
-      const multi2 = client.multi();
-      multi2.hset(key, { count: '1', resetAt: String(newResetAt) });
-      multi2.pexpire(key, windowMs);
-      await multi2.exec();
-
-      return { allowed: true, remaining: maxAttempts - 1 };
-    }
-
-    if (count >= maxAttempts) {
-      const retryAfter = Math.ceil((resetAt - now) / 1000);
-      return { allowed: false, remaining: 0, retryAfter: Math.max(retryAfter, 1) };
-    }
-
-    // Increment
-    await client.hincrby(key, 'count', 1);
-    return { allowed: true, remaining: maxAttempts - count - 1 };
+    const [allowed, remaining, retryAfter] = result;
+    return {
+      allowed: allowed === 1,
+      remaining,
+      retryAfter: retryAfter > 0 ? retryAfter : undefined,
+    };
   } catch {
-    // Redis error — fail open (allow the request)
+    // Redis error — fail open
     return { allowed: true, remaining: maxAttempts - 1 };
   }
 }
 
 // ─── In-memory fallback implementation ───────────────────────
 
+const MAX_MEMORY_ENTRIES = 10000;
+
 function checkRateLimitMemory(
   key: string,
   maxAttempts: number,
   windowMs: number
 ): RateLimitResult {
+  // Evict expired entries if at capacity
+  if (memoryStore.size >= MAX_MEMORY_ENTRIES) {
+    const now = Date.now();
+    let evicted = 0;
+    for (const [k, entry] of memoryStore) {
+      if (now > entry.resetAt) {
+        memoryStore.delete(k);
+        evicted++;
+      }
+    }
+    // If still at capacity after cleanup, reject
+    if (memoryStore.size >= MAX_MEMORY_ENTRIES) {
+      return { allowed: false, remaining: 0, retryAfter: 60 };
+    }
+  }
+
   const now = Date.now();
   const entry = memoryStore.get(key);
 
