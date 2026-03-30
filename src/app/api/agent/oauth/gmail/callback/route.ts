@@ -16,11 +16,24 @@ export async function GET(request: Request) {
 
   // Decode state
   let firmId: string;
+  let nonce: string;
   try {
     const decoded = JSON.parse(Buffer.from(state!, 'base64url').toString());
     firmId = decoded.firmId;
+    nonce = decoded.nonce;
   } catch {
     return NextResponse.redirect(`${process.env.APP_URL}/agent/config?error=invalid_state`);
+  }
+
+  // Verify CSRF nonce
+  const cookieHeader = request.headers.get('cookie') || '';
+  const nonceMatch = cookieHeader.match(/oauth_nonce=([^;]+)/);
+  const cookieNonce = nonceMatch?.[1];
+
+  if (!cookieNonce || cookieNonce !== nonce) {
+    return NextResponse.redirect(
+      `${process.env.APP_URL}/agent/config?error=invalid_state`
+    );
   }
 
   // Exchange code for tokens

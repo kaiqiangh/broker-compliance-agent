@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import { withAuth } from '@/lib/auth';
 
 const OUTLOOK_SCOPES = ['Mail.Read', 'offline_access'];
@@ -15,7 +16,10 @@ export const GET = withAuth(null, async (user, _request) => {
   }
 
   const redirectUri = `${process.env.APP_URL}/api/agent/oauth/outlook/callback`;
-  const state = Buffer.from(JSON.stringify({ firmId: user.firmId })).toString('base64url');
+
+  // Generate CSRF nonce and include in state
+  const nonce = randomBytes(32).toString('hex');
+  const state = Buffer.from(JSON.stringify({ firmId: user.firmId, nonce })).toString('base64url');
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -26,7 +30,18 @@ export const GET = withAuth(null, async (user, _request) => {
     response_mode: 'query',
   });
 
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`
   );
+
+  // Store nonce in HttpOnly cookie for CSRF verification on callback
+  response.cookies.set('oauth_nonce', nonce, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: 600, // 10 minutes
+    path: '/',
+  });
+
+  return response;
 });
