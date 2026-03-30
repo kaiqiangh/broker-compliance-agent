@@ -96,10 +96,10 @@ Aviva Ireland`;
     expect(desensitized).not.toContain('john@example.com');
     expect(desensitized).not.toContain('1234567T');
     expect(desensitized).not.toContain('POL-2024-001');
-    // Non-PII should be preserved
     expect(desensitized).toContain('€1,350.00');
-    expect(desensitized).toContain('Seán Ó Briain'); // Name detection is hard, might not replace
-    expect(desensitized).toContain('15/03/2027'); // Expiry date not near DOB
+    expect(desensitized).toContain('15/03/2027');
+    // Name may be detected via client keyword
+    expect(tokens.length).toBeGreaterThan(3);
   });
 });
 
