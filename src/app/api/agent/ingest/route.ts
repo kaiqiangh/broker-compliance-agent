@@ -49,18 +49,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Rate limit: 100 emails/min per firm (extracted from recipient later, use IP as fallback)
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const ip = forwardedFor?.split(',')[0]?.trim() || 'unknown';
-  const rlKey = `agent:ingest:${ip}`;
-  const rl = await checkRateLimit(rlKey, 100, 60);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
-    );
-  }
-
   // Read raw body
   const rawBody = await request.text();
   const signature = request.headers.get('x-webhook-signature');
@@ -73,6 +61,17 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } },
       { status: 400 }
+    );
+  }
+
+  // Rate limit: 100 emails/min per firm (extracted from recipient address)
+  const firmIdFromTo = extractFirmId(body.to);
+  const rlKey = firmIdFromTo ? `agent:ingest:firm:${firmIdFromTo}` : `agent:ingest:global`;
+  const rl = await checkRateLimit(rlKey, 100, 60);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
     );
   }
 
@@ -126,15 +125,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Dedup check
-  const existing = await prisma.incomingEmail.findFirst({
-    where: { firmId, messageId },
-  });
-
-  if (existing) {
-    return NextResponse.json({ status: 'duplicate', messageId }, { status: 200 });
-  }
-
   // Extract email fields
   const fromAddress = (parsed.from as any)?.value?.[0]?.address || body.from;
   const toAddresses = ((parsed.to as any)?.value || []).map((v: any) => v.address || '').filter(Boolean);
@@ -158,23 +148,32 @@ export async function POST(request: Request) {
   // Determine thread ID
   const threadId = inReplyTo || references[0] || messageId;
 
-  // Store email in DB
-  const email = await prisma.incomingEmail.create({
-    data: {
-      firmId,
-      messageId,
-      inReplyTo,
-      threadId,
-      fromAddress,
-      toAddresses,
-      ccAddresses,
-      subject,
-      receivedAt,
-      bodyText,
-      bodyHtml,
-      status: 'pending_processing',
-    },
-  });
+  // Store email in DB (unique constraint on firmId+messageId handles dedup atomically)
+  let email;
+  try {
+    email = await prisma.incomingEmail.create({
+      data: {
+        firmId,
+        messageId,
+        inReplyTo,
+        threadId,
+        fromAddress,
+        toAddresses,
+        ccAddresses,
+        subject,
+        receivedAt,
+        bodyText,
+        bodyHtml,
+        status: 'pending_processing',
+      },
+    });
+  } catch (err: any) {
+    // P2002 = unique constraint violation = duplicate
+    if (err.code === 'P2002') {
+      return NextResponse.json({ status: 'duplicate', messageId }, { status: 200 });
+    }
+    throw err;
+  }
 
   // TODO: Store raw email in R2 (Week 1.3 continued)
   // TODO: Enqueue for async processing via BullMQ (Week 3)

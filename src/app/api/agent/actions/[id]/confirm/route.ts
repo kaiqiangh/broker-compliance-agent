@@ -2,43 +2,60 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
+import { executeAction } from '@/lib/agent/action-executor';
+import { publishAgentEvent } from '@/app/api/agent/events/route';
 
 export const PUT = withAuth(null, async (user, request) => {
-  // Extract action ID from URL path
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
-  const actionId = pathParts[pathParts.length - 2]; // .../actions/[id]/confirm → [id]
+  const actionId = pathParts[pathParts.length - 2];
 
-  const action = await prisma.agentAction.findUnique({
-    where: { id: actionId, firmId: user.firmId },
+  // Atomic: update status only if currently 'pending' (prevents race condition)
+  const result = await prisma.agentAction.updateMany({
+    where: {
+      id: actionId,
+      firmId: user.firmId,
+      status: 'pending', // Atomic check — only update if still pending
+    },
+    data: {
+      status: 'confirmed',
+      confirmedBy: user.id,
+      confirmedAt: new Date(),
+    },
   });
 
-  if (!action) {
-    return NextResponse.json(
-      { error: { code: 'NOT_FOUND', message: 'Action not found' } },
-      { status: 404 }
-    );
-  }
-
-  if (action.status !== 'pending') {
+  if (result.count === 0) {
+    // Either not found or already confirmed/modified/rejected
+    const action = await prisma.agentAction.findUnique({
+      where: { id: actionId, firmId: user.firmId },
+    });
+    if (!action) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Action not found' } },
+        { status: 404 }
+      );
+    }
     return NextResponse.json(
       { error: { code: 'BAD_REQUEST', message: `Action is already ${action.status}` } },
       { status: 400 }
     );
   }
 
-  // Execute the action
-  await executeAction(action);
+  // Fetch the full action for execution
+  const action = await prisma.agentAction.findUniqueOrThrow({
+    where: { id: actionId },
+  });
 
-  // Update action status
+  // Execute the action (handles ALL action types)
+  await executeAction({
+    ...action,
+    changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
+  });
+
+  // Mark as executed
   await prisma.agentAction.update({
     where: { id: actionId },
-    data: {
-      status: 'confirmed',
-      confirmedBy: user.id,
-      confirmedAt: new Date(),
-      executedAt: new Date(),
-    },
+    data: { executedAt: new Date() },
   });
 
   await auditLog(user.firmId, 'agent.action_confirmed', 'agent_action', actionId, {
@@ -48,43 +65,11 @@ export const PUT = withAuth(null, async (user, request) => {
     confirmedBy: user.id,
   });
 
+  // SSE: notify frontend
+  publishAgentEvent(user.firmId, {
+    type: 'action_confirmed',
+    data: { id: actionId, actionType: action.actionType },
+  });
+
   return NextResponse.json({ data: { id: actionId, status: 'confirmed' } });
 });
-
-async function executeAction(action: any) {
-  const changes = action.changes as Record<string, { old: any; new: any }>;
-
-  switch (action.actionType) {
-    case 'update_policy': {
-      const updateData: Record<string, any> = {};
-      for (const [field, diff] of Object.entries(changes)) {
-        if (field === 'premium') updateData.premium = diff.new;
-        else if (field === 'expiry_date') updateData.expiryDate = new Date(diff.new);
-        else if (field === 'ncb') updateData.ncb = diff.new;
-      }
-      if (Object.keys(updateData).length > 0 && action.entityId) {
-        await prisma.policy.update({
-          where: { id: action.entityId },
-          data: updateData,
-        });
-
-        // Update linked renewal if exists
-        if (changes.expiry_date) {
-          const renewal = await prisma.renewal.findFirst({
-            where: { policyId: action.entityId, status: { not: 'compliant' } },
-          });
-          if (renewal) {
-            await prisma.renewal.update({
-              where: { id: renewal.id },
-              data: {
-                dueDate: new Date(changes.expiry_date.new),
-                newPremium: changes.premium?.new || renewal.newPremium,
-              },
-            });
-          }
-        }
-      }
-      break;
-    }
-  }
-}

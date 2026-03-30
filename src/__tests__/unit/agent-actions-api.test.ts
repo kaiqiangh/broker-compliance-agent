@@ -5,7 +5,9 @@ vi.mock('@/lib/prisma', () => ({
     agentAction: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       count: vi.fn(),
     },
     policy: {
@@ -21,6 +23,10 @@ vi.mock('@/lib/auth', () => ({
 
 vi.mock('@/lib/audit', () => ({
   auditLog: vi.fn(),
+}));
+
+vi.mock('@/app/api/agent/events/route', () => ({
+  publishAgentEvent: vi.fn(),
 }));
 
 import { prisma } from '@/lib/prisma';
@@ -63,14 +69,16 @@ describe('PUT /api/agent/actions/:id/confirm', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('confirms and executes action', async () => {
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    // Atomic updateMany returns count: 1 (success)
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
+    (prisma.agentAction.findUniqueOrThrow as any).mockResolvedValue({
       id: 'a1',
       firmId: 'f1',
       actionType: 'update_policy',
       entityType: 'policy',
       entityId: 'p1',
       changes: { premium: { old: 1000, new: 1200 } },
-      status: 'pending',
+      status: 'confirmed',
     });
     (prisma.policy.update as any).mockResolvedValue({});
     (prisma.agentAction.update as any).mockResolvedValue({});
@@ -78,20 +86,21 @@ describe('PUT /api/agent/actions/:id/confirm', () => {
     const { PUT } = await import('@/app/api/agent/actions/[id]/confirm/route');
     const res = await PUT(
       { firmId: 'f1', id: 'u1', role: 'adviser' } as any,
-      new Request('http://localhost', { method: 'PUT' }),
-      { params: { id: 'a1' } }
+      new Request('http://localhost', { method: 'PUT' })
     );
 
     expect(res.status).toBe(200);
-    expect(prisma.agentAction.update).toHaveBeenCalledWith(
+    expect(prisma.agentAction.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'confirmed' }),
+        where: expect.objectContaining({ status: 'pending' }),
       })
     );
     expect(auditLog).toHaveBeenCalled();
   });
 
   it('returns 404 for non-existent action', async () => {
+    // updateMany returns count: 0 (not found or already processed)
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 0 });
     (prisma.agentAction.findUnique as any).mockResolvedValue(null);
 
     const { PUT } = await import('@/app/api/agent/actions/[id]/confirm/route');
@@ -105,6 +114,8 @@ describe('PUT /api/agent/actions/:id/confirm', () => {
   });
 
   it('returns 400 if action already confirmed', async () => {
+    // updateMany returns 0 (status not pending)
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 0 });
     (prisma.agentAction.findUnique as any).mockResolvedValue({
       id: 'a1',
       status: 'confirmed',
