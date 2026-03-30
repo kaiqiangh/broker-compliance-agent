@@ -35,76 +35,134 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
   const firmId = email.firmId;
 
   return runWithFirmContext(firmId, async () => {
+    const startTime = Date.now();
+
     try {
-      // Set status to processing
-      await prisma.incomingEmail.update({
-        where: { id: emailId },
-        data: { status: 'processing' },
-      });
+      // Determine start step (resume from where we left off)
+      const startStep = email.pipelineStep || 'classify';
+      let classification: any;
+      let extraction: any;
+      let resensitized: any;
+      let matching: any;
 
-      const startTime = Date.now();
-
-      // Step 1: Classify
-      const classification = await classifyEmail({
-        subject: email.subject,
-        from: email.fromAddress,
-        bodyText: email.bodyText || '',
-      });
-
-      // Update email with classification
-      await prisma.incomingEmail.update({
-        where: { id: emailId },
-        data: {
-          isInsurance: classification.isInsurance,
-          category: classification.category,
-          priority: classification.priority,
-          classificationConfidence: classification.confidence,
-        },
-      });
-
-      await auditLog(firmId, 'agent.email_classified', 'incoming_email', emailId, {
-        category: classification.category,
-        confidence: classification.confidence,
-      });
-
-      // Step 2: If not insurance, stop here
-      if (!classification.isInsurance) {
+      // ── Step 1: Classify ──
+      if (startStep === 'classify') {
+        // Set status to processing
         await prisma.incomingEmail.update({
           where: { id: emailId },
-          data: { status: 'not_insurance', processedAt: new Date() },
+          data: { status: 'processing', pipelineStep: 'classify' },
         });
 
+        classification = await classifyEmail({
+          subject: email.subject,
+          from: email.fromAddress,
+          bodyText: email.bodyText || '',
+        });
+
+        // Update email with classification
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: {
+            isInsurance: classification.isInsurance,
+            category: classification.category,
+            priority: classification.priority,
+            classificationConfidence: classification.confidence,
+            pipelineStep: 'desensitize',
+          },
+        });
+
+        await auditLog(firmId, 'agent.email_classified', 'incoming_email', emailId, {
+          category: classification.category,
+          confidence: classification.confidence,
+        });
+
+        // If not insurance, stop here
+        if (!classification.isInsurance) {
+          await prisma.incomingEmail.update({
+            where: { id: emailId },
+            data: { status: 'not_insurance', processedAt: new Date(), pipelineStep: null },
+          });
+
+          return { emailId, classification, action: null, autoExecuted: false };
+        }
+      }
+
+      // If resuming past classify, re-fetch classification from DB
+      if (!classification && startStep !== 'classify') {
+        classification = {
+          isInsurance: email.isInsurance,
+          category: email.category,
+          priority: email.priority,
+          confidence: Number(email.classificationConfidence || 0.9),
+        };
+      }
+
+      // ── Step 2-5: Desensitize, Extract, Resensitize ──
+      if (startStep === 'classify' || startStep === 'desensitize') {
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: { pipelineStep: 'desensitize' },
+        });
+
+        // Desensitize PII (bodyText only — bodyHtml has HTML tags that pollute LLM input)
+        const bodyText = email.bodyText || '';
+
+        // Include attachment text if available
+        const attachments = await prisma.emailAttachment.findMany({
+          where: { emailId },
+          select: { extractedText: true, filename: true },
+        });
+        const attachmentText = attachments
+          .filter(a => a.extractedText)
+          .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
+          .join('\n');
+
+        const fullContext = bodyText + attachmentText;
+        const desensitizeResult = desensitizePII(fullContext);
+
+        const tokens = desensitizeResult.tokens;
+        const desensitized = desensitizeResult.desensitized;
+
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: { pipelineStep: 'extract' },
+        });
+
+        // Extract data
+        extraction = await extractData(desensitized, classification.category, {
+          subject: email.subject,
+          from: email.fromAddress,
+          bodyText: desensitized,
+        });
+
+        // Resensitize
+        resensitized = resensitize(extraction, tokens);
+
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: { pipelineStep: 'match' },
+        });
+      }
+
+      // If resuming at 'match' or later without resensitized data, reset to desensitize
+      // (tokens from desensitize are lost, can't skip re-running LLM steps)
+      if (!resensitized && (startStep === 'match' || startStep === 'action')) {
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: { pipelineStep: 'desensitize', status: 'pending_processing' },
+        });
         return { emailId, classification, action: null, autoExecuted: false };
       }
 
-      // Step 3: Desensitize PII (bodyText only — bodyHtml has HTML tags that pollute LLM input)
-      const bodyText = email.bodyText || '';
+      // ── Step 6: Match to existing records ──
+      if (startStep === 'classify' || startStep === 'desensitize' || startStep === 'match') {
+        matching = await matchRecords(firmId, resensitized);
 
-      // Include attachment text if available
-      const attachments = await prisma.emailAttachment.findMany({
-        where: { emailId },
-        select: { extractedText: true, filename: true },
-      });
-      const attachmentText = attachments
-        .filter(a => a.extractedText)
-        .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
-        .join('\n');
-
-      const fullContext = bodyText + attachmentText;
-      const { desensitized, tokens } = desensitizePII(fullContext);
-
-      // Step 4: Extract data
-      const extraction = await extractData(desensitized, classification.category, {
-        subject: email.subject,
-        from: email.fromAddress,
-        bodyText: desensitized,
-      });
-
-      // Step 5: Resensitize
-      const resensitized = resensitize(extraction, tokens);
-
-      // Step 6: Match to existing records
-      const matching = await matchRecords(firmId, resensitized);
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: { pipelineStep: 'action' },
+        });
+      }
 
       // Step 7: Get existing policy data if matched
       let existingPolicy = null;
@@ -131,7 +189,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         existingPolicy,
       });
 
-      // Step 8.5: Email threading - merge into existing action if same thread
+      // Step 8.5: Email threading - merge into existing action if same thread (with transaction)
       if (email.threadId && actionData.type !== 'flag_for_review') {
         const existingThreadAction = await prisma.agentAction.findFirst({
           where: {
@@ -143,23 +201,23 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         });
 
         if (existingThreadAction) {
-          const mergedChanges = {
-            ...(existingThreadAction.changes as Record<string, any>),
-            ...(Object.keys(actionData.changes).length > 0 ? actionData.changes : {}),
-          };
-
-          await prisma.agentAction.update({
-            where: { id: existingThreadAction.id },
-            data: {
-              changes: mergedChanges,
-              reasoning: (existingThreadAction.reasoning || '') + `\n\n[Updated: ${email.subject}]`,
-            },
-          });
-
-          await prisma.incomingEmail.update({
-            where: { id: emailId },
-            data: { status: 'processed', processedAt: new Date() },
-          });
+          // TRANSACTION: atomically update both action and email
+          await prisma.$transaction([
+            prisma.agentAction.update({
+              where: { id: existingThreadAction.id },
+              data: {
+                changes: {
+                  ...(existingThreadAction.changes as Record<string, any>),
+                  ...(Object.keys(actionData.changes).length > 0 ? actionData.changes : {}),
+                },
+                reasoning: (existingThreadAction.reasoning || '') + `\n\n[Updated: ${email.subject}]`,
+              },
+            }),
+            prisma.incomingEmail.update({
+              where: { id: emailId },
+              data: { status: 'processed', processedAt: new Date(), pipelineStep: null },
+            }),
+          ]);
 
           return {
             emailId,
@@ -232,7 +290,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
       const processingTimeMs = Date.now() - startTime;
       await prisma.incomingEmail.update({
         where: { id: emailId },
-        data: { status: 'processed', processedAt: new Date() },
+        data: { status: 'processed', processedAt: new Date(), pipelineStep: null },
       });
 
       await auditLog(firmId, 'agent.email_processed', 'incoming_email', emailId, {
@@ -246,15 +304,36 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         action: { id: action.id, type: actionData.type, status, mode },
         autoExecuted,
       };
+
     } catch (error) {
-      // Mark email as error
-      await prisma.incomingEmail.update({
+      // If we had made progress (pipelineStep is set beyond classify), allow retry from last step
+      // Otherwise mark as error
+      const emailState = await prisma.incomingEmail.findUnique({
         where: { id: emailId },
-        data: {
-          status: 'error',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        },
+        select: { pipelineStep: true },
       });
+
+      if (emailState?.pipelineStep && emailState.pipelineStep !== 'classify') {
+        // Had progress — reset to pending so worker retries
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: {
+            status: 'pending_processing',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            // Keep pipelineStep so we resume from last successful step
+          },
+        });
+      } else {
+        // No progress — permanent error
+        await prisma.incomingEmail.update({
+          where: { id: emailId },
+          data: {
+            status: 'error',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            pipelineStep: null,
+          },
+        });
+      }
 
       throw error;
     }
