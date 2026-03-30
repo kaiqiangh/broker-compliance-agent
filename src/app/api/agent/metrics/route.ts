@@ -40,7 +40,12 @@ export const GET = withAuth(null, async (user, request) => {
   ]);
 
   const totalDecided = confirmedActions + modifiedActions + rejectedActions;
+  // "Useful rate" — agent was on the right track (confirmed or modified = useful)
   const accuracyRate = totalDecided > 0
+    ? Math.round(((confirmedActions + modifiedActions) / totalDecided) * 100)
+    : 0;
+  // "Perfect rate" — no modifications needed
+  const strictAccuracy = totalDecided > 0
     ? Math.round((confirmedActions / totalDecided) * 100)
     : 0;
 
@@ -58,6 +63,7 @@ export const GET = withAuth(null, async (user, request) => {
         rejectedActions,
         autoExecutedActions,
         accuracyRate,
+        strictAccuracy,
         timeSavedMinutes,
         timeSavedHours: Math.round(timeSavedMinutes / 60 * 10) / 10,
       },
