@@ -124,13 +124,12 @@ export async function aggregateDailyMetrics(): Promise<void> {
 }
 
 export async function detectStaleEmails(): Promise<number> {
-  const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
+  const staleThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
 
   const staleEmails = await prisma.incomingEmail.findMany({
     where: {
       status: 'processing',
-      // Emails stuck in processing for > 5 minutes (using createdAt as proxy since no updatedAt on this table)
-      createdAt: { lt: staleThreshold },
+      processingStartedAt: { lt: staleThreshold },
     },
     select: { id: true },
   });
@@ -141,6 +140,7 @@ export async function detectStaleEmails(): Promise<number> {
       where: { id: email.id },
       data: {
         status: 'pending_processing',
+        processingStartedAt: null,
         errorMessage: 'Processing timeout, re-queued',
       },
     });

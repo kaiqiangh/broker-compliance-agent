@@ -8,7 +8,10 @@ function getClient(): OpenAI {
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY environment variable is required');
     }
-    client = new OpenAI({ apiKey });
+    client = new OpenAI({
+      apiKey,
+      timeout: 30_000, // 30 second timeout
+    });
   }
   return client;
 }
@@ -43,20 +46,22 @@ export async function callLLMJson<T = Record<string, any>>(
   prompt: string,
   options: LLMOptions = {}
 ): Promise<T> {
-  const content = await callLLM(prompt, {
-    ...options,
-    responseFormat: { type: 'json_object' },
-  });
+  return callLLMWithRetry(async () => {
+    const content = await callLLM(prompt, {
+      ...options,
+      responseFormat: { type: 'json_object' },
+    });
 
-  try {
-    const parsed = JSON.parse(content);
-    if (typeof parsed !== 'object' || parsed === null) {
-      throw new Error('LLM response is not an object');
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed !== 'object' || parsed === null) {
+        throw new Error('LLM response is not an object');
+      }
+      return parsed as T;
+    } catch (err) {
+      throw new Error(`LLM returned invalid JSON: ${content.slice(0, 200)}`);
     }
-    return parsed as T;
-  } catch (err) {
-    throw new Error(`LLM returned invalid JSON: ${content.slice(0, 200)}`);
-  }
+  });
 }
 
 /**
