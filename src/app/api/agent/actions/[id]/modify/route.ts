@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
+import { executeAction } from '@/lib/agent/action-executor';
+import { publishAgentEvent } from '@/app/api/agent/events/route';
 
 export const PUT = withAuth('agent:modify_action', async (user, request) => {
   const url = new URL(request.url);
@@ -21,15 +23,15 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
 
   if (action.status !== 'pending') {
     return NextResponse.json(
-      { error: { code: 'BAD_REQUEST', message: `Action is already ${action.status}` } },
+      { error: { code: 'BAD_REQUEST', message: `Cannot modify action with status: ${action.status}` } },
       { status: 400 }
     );
   }
 
-  let modifications: Record<string, any> = {};
+  // Parse modifications from request body
+  let body: { modifications?: Record<string, any>; reason?: string };
   try {
-    const body = await request.json();
-    modifications = body.modifications || {};
+    body = await request.json();
   } catch {
     return NextResponse.json(
       { error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } },
@@ -37,63 +39,73 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
     );
   }
 
-  // Apply modifications to changes
-  const originalChanges = action.changes as Record<string, { old: any; new: any }>;
-  const updatedChanges = { ...originalChanges };
+  const modifications = body.modifications || {};
+
+  // Apply modifications to the action's changes
+  const currentChanges = (action.changes || {}) as Record<string, { old: any; new: any }>;
+  const modifiedChanges = { ...currentChanges };
 
   for (const [field, newValue] of Object.entries(modifications)) {
-    if (updatedChanges[field]) {
-      updatedChanges[field] = { old: updatedChanges[field].old, new: newValue };
+    if (modifiedChanges[field]) {
+      // Update the 'new' value, keep 'old' as-is
+      modifiedChanges[field] = { old: modifiedChanges[field].old, new: newValue };
+    } else {
+      // New field added by user
+      modifiedChanges[field] = { old: null, new: newValue };
     }
   }
 
   // Record each modification for learning
   for (const [field, newValue] of Object.entries(modifications)) {
-    const originalValue = originalChanges[field]?.new;
-    if (originalValue !== newValue) {
-      await prisma.agentActionModification.create({
-        data: {
-          actionId,
-          firmId: user.firmId,
-          fieldName: field,
-          originalValue: String(originalValue),
-          correctedValue: String(newValue),
-          modifiedBy: user.id,
-        },
-      });
-    }
+    await prisma.agentActionModification.create({
+      data: {
+        actionId,
+        firmId: user.firmId,
+        fieldName: field,
+        originalValue: currentChanges[field]?.new != null ? String(currentChanges[field].new) : null,
+        correctedValue: String(newValue),
+        modifiedBy: user.id,
+      },
+    });
   }
 
-  // Execute with modified values
-  if (action.actionType === 'update_policy' && action.entityId) {
-    const updateData: Record<string, any> = {};
-    for (const [field, diff] of Object.entries(updatedChanges)) {
-      if (field === 'premium') updateData.premium = diff.new;
-      else if (field === 'expiry_date') updateData.expiryDate = new Date(diff.new);
-      else if (field === 'ncb') updateData.ncb = diff.new;
-    }
-    if (Object.keys(updateData).length > 0) {
-      await prisma.policy.update({ where: { id: action.entityId }, data: updateData });
-    }
-  }
-
-  // Update action
+  // Update action with modifications
   await prisma.agentAction.update({
     where: { id: actionId },
     data: {
+      changes: modifiedChanges,
       status: 'modified',
-      changes: updatedChanges,
-      modifiedFields: modifications,
       confirmedBy: user.id,
       confirmedAt: new Date(),
-      executedAt: new Date(),
+      modifiedFields: modifications,
     },
+  });
+
+  // Execute the action with modified values
+  await executeAction({
+    id: actionId,
+    actionType: action.actionType,
+    entityId: action.entityId,
+    firmId: user.firmId,
+    changes: modifiedChanges,
+  });
+
+  // Mark as executed
+  await prisma.agentAction.update({
+    where: { id: actionId },
+    data: { executedAt: new Date() },
   });
 
   await auditLog(user.firmId, 'agent.action_modified', 'agent_action', actionId, {
     actionType: action.actionType,
     modifications,
     modifiedBy: user.id,
+  });
+
+  // SSE: notify frontend
+  publishAgentEvent(user.firmId, {
+    type: 'action_modified',
+    data: { id: actionId, actionType: action.actionType },
   });
 
   return NextResponse.json({ data: { id: actionId, status: 'modified' } });

@@ -46,11 +46,32 @@ export const PUT = withAuth('agent:confirm_action', async (user, request) => {
     where: { id: actionId },
   });
 
-  // Execute the action (handles ALL action types)
-  await executeAction({
-    ...action,
-    changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
-  });
+  // Execute the action — with rollback on failure
+  try {
+    await executeAction({
+      ...action,
+      changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
+    });
+  } catch (error) {
+    // ROLLBACK: revert status to pending so user can retry
+    await prisma.agentAction.update({
+      where: { id: actionId },
+      data: {
+        status: 'pending',
+        confirmedBy: null,
+        confirmedAt: null,
+      },
+    });
+
+    await auditLog(user.firmId, 'agent.action_confirm_failed', 'agent_action', actionId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    return NextResponse.json(
+      { error: { code: 'EXECUTION_FAILED', message: 'Action execution failed. Status reverted to pending. Please retry.' } },
+      { status: 500 }
+    );
+  }
 
   // Mark as executed
   await prisma.agentAction.update({
