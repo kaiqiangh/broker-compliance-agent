@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 // Types
 interface AgentAction {
@@ -290,6 +291,20 @@ export default function AgentDashboardPage() {
   const [mainTab, setMainTab] = useState<'pending' | 'history'>('pending');
   const [historyActions, setHistoryActions] = useState<AgentAction[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const router = useRouter();
+
+  // Redirect to onboarding on first visit
+  useEffect(() => {
+    const skip = localStorage.getItem('agent_onboarding_complete');
+    if (skip) return;
+
+    fetch('/api/agent/config')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.data) router.push('/agent/onboarding');
+      })
+      .catch(() => {});
+  }, [router]);
 
   // Fetch pending actions
   const fetchActions = useCallback(async () => {
