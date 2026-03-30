@@ -8,6 +8,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { storeRawEmail } from '@/lib/email/storage';
 import { enqueueJob } from '@/lib/agent/queue';
 import { auditLog } from '@/lib/audit';
+import { extractAttachmentText } from '@/lib/email/attachment-extractor';
 
 interface IngestBody {
   from: string;
@@ -210,6 +211,42 @@ export async function POST(request: Request) {
       where: { id: email.id },
       data: { rawUrl },
     });
+  }
+
+  // Process email attachments — extract text for agent analysis
+  const emailAttachments = (parsed as any).attachments || [];
+  for (const att of emailAttachments) {
+    try {
+      const extractedText = await extractAttachmentText(
+        att.filename || 'unknown',
+        att.contentType || 'application/octet-stream',
+        att.content
+      );
+
+      await prisma.emailAttachment.create({
+        data: {
+          emailId: email.id,
+          firmId,
+          filename: att.filename || 'unknown',
+          contentType: att.contentType || 'application/octet-stream',
+          sizeBytes: att.size || 0,
+          extractedText: extractedText || null,
+        },
+      });
+    } catch (err) {
+      console.error(`[ingest] Failed to process attachment ${att.filename}:`, err);
+      // Store without extracted text — don't block the pipeline
+      await prisma.emailAttachment.create({
+        data: {
+          emailId: email.id,
+          firmId,
+          filename: att.filename || 'unknown',
+          contentType: att.contentType || 'application/octet-stream',
+          sizeBytes: att.size || 0,
+          extractedText: null,
+        },
+      });
+    }
   }
 
   // Enqueue for async processing
