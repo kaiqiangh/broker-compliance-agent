@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 
 const tabs = [
   { href: '/agent', label: 'Dashboard' },
+  { href: '/agent/metrics', label: 'Metrics' },
   { href: '/agent/config', label: 'Configuration' },
 ];
 
