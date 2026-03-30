@@ -1,0 +1,86 @@
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from 'next/server';
+import { withAuth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { z } from 'zod';
+
+const UpdateConfigSchema = z.object({
+  executionMode: z.enum(['suggestion', 'auto_execute']).optional(),
+  confidenceThreshold: z.number().min(0.5).max(0.99).optional(),
+  processAttachments: z.boolean().optional(),
+  emailFolderFilter: z.array(z.string()).optional(),
+}).strict();
+
+export const GET = withAuth(null, async (user, _request) => {
+  const config = await prisma.emailIngressConfig.findUnique({
+    where: { firmId: user.firmId },
+  });
+
+  if (!config) {
+    return NextResponse.json({ data: null });
+  }
+
+  return NextResponse.json({
+    data: {
+      forwardingAddress: config.forwardingAddress,
+      provider: config.provider,
+      executionMode: config.executionMode,
+      confidenceThreshold: Number(config.confidenceThreshold),
+      processAttachments: config.processAttachments,
+      status: config.status,
+      lastPolledAt: config.lastPolledAt,
+      createdAt: config.createdAt,
+    },
+  });
+});
+
+export const PUT = withAuth(null, async (user, request) => {
+  let body: z.infer<typeof UpdateConfigSchema>;
+  try {
+    const raw = await request.json();
+    body = UpdateConfigSchema.parse(raw);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: err.issues[0].message } },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(
+      { error: { code: 'BAD_REQUEST', message: 'Invalid JSON' } },
+      { status: 400 }
+    );
+  }
+
+  // Generate forwarding address if not exists
+  const forwardingAddress = `agent-${user.firmId}@ingest.${process.env.INGEST_DOMAIN || 'yourproduct.com'}`;
+
+  const config = await prisma.emailIngressConfig.upsert({
+    where: { firmId: user.firmId },
+    update: {
+      ...(body.executionMode !== undefined && { executionMode: body.executionMode }),
+      ...(body.confidenceThreshold !== undefined && { confidenceThreshold: body.confidenceThreshold }),
+      ...(body.processAttachments !== undefined && { processAttachments: body.processAttachments }),
+      ...(body.emailFolderFilter !== undefined && { emailFolderFilter: body.emailFolderFilter }),
+    },
+    create: {
+      firmId: user.firmId,
+      forwardingAddress,
+      executionMode: body.executionMode || 'suggestion',
+      confidenceThreshold: body.confidenceThreshold || 0.95,
+      processAttachments: body.processAttachments ?? true,
+      status: 'active',
+    },
+  });
+
+  return NextResponse.json({
+    data: {
+      forwardingAddress: config.forwardingAddress,
+      executionMode: config.executionMode,
+      confidenceThreshold: Number(config.confidenceThreshold),
+      processAttachments: config.processAttachments,
+      status: config.status,
+    },
+  });
+});
