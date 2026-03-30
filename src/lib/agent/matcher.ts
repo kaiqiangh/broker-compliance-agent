@@ -68,7 +68,8 @@ export async function matchRecords(
     // Fuzzy match
     const candidates = await prisma.policy.findMany({
       where: { firmId, policyStatus: 'active' },
-      take: 50,
+      take: 500,
+      orderBy: { policyNumberNormalized: 'asc' },
     });
 
     let bestPolicy: typeof candidates[0] | null = null;
@@ -93,7 +94,8 @@ export async function matchRecords(
   if (extraction.clientName) {
     const clients = await prisma.client.findMany({
       where: { firmId },
-      take: 50,
+      take: 500,
+      orderBy: { name: 'asc' },
     });
 
     let bestClient: typeof clients[0] | null = null;

@@ -5,6 +5,8 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { simpleParser } from 'mailparser';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { storeRawEmail } from '@/lib/email/storage';
+import { enqueueJob } from '@/lib/agent/queue';
 
 interface IngestBody {
   from: string;
@@ -175,8 +177,17 @@ export async function POST(request: Request) {
     throw err;
   }
 
-  // TODO: Store raw email in R2 (Week 1.3 continued)
-  // TODO: Enqueue for async processing via BullMQ (Week 3)
+  // Store raw email in R2 (non-blocking)
+  const rawUrl = await storeRawEmail(firmId, messageId, rawEmailBuffer);
+  if (rawUrl) {
+    await prisma.incomingEmail.update({
+      where: { id: email.id },
+      data: { rawUrl },
+    });
+  }
+
+  // Enqueue for async processing
+  await enqueueJob({ type: 'process_email', data: { emailId: email.id } });
 
   return NextResponse.json(
     {
