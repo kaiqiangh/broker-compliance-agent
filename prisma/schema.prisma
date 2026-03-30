@@ -34,6 +34,13 @@ model Firm {
   attestations      Attestation[]
   cpcRules          CpcRule[]
 
+  emailIngressConfig  EmailIngressConfig?
+  incomingEmails      IncomingEmail[]
+  emailAttachments    EmailAttachment[]
+  agentActions        AgentAction[]
+  agentModifications  AgentActionModification[]
+  agentMetrics        AgentMetricsDaily[]
+
   @@map("firms")
 }
 
@@ -348,4 +355,161 @@ model CpcRule {
   @@index([firmId, ruleType])
   @@unique([firmId, ruleId])
   @@map("cpc_rules")
+}
+
+// ═══ AI AGENT ═══
+
+model EmailIngressConfig {
+  id                         String    @id @default(uuid())
+  firmId                     String    @unique @map("firm_id")
+  forwardingAddress          String?   @unique @map("forwarding_address") @db.VarChar(255)
+  provider                   String?   @db.VarChar(50) // gmail, outlook, imap
+  oauthAccessTokenEncrypted  String?   @map("oauth_access_token_encrypted") @db.Text
+  oauthRefreshTokenEncrypted String?   @map("oauth_refresh_token_encrypted") @db.Text
+  oauthExpiresAt             DateTime? @map("oauth_expires_at")
+  imapHost                   String?   @map("imap_host") @db.VarChar(255)
+  imapPort                   Int?      @map("imap_port")
+  imapUsername               String?   @map("imap_username") @db.VarChar(255)
+  imapPasswordEncrypted      String?   @map("imap_password_encrypted") @db.Text
+  executionMode              String    @default("suggestion") @map("execution_mode") // suggestion, auto_execute
+  confidenceThreshold        Decimal   @default(0.95) @map("confidence_threshold") @db.Decimal(3, 2)
+  processAttachments         Boolean   @default(true) @map("process_attachments")
+  emailFolderFilter          String[]  @map("email_folder_filter")
+  status                     String    @default("active") @map("status") // active, paused, error, disconnected
+  lastPolledAt               DateTime? @map("last_polled_at")
+  lastError                  String?   @map("last_error") @db.Text
+  errorCount                 Int       @default(0) @map("error_count")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+
+  firm                       Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@map("email_ingress_configs")
+}
+
+model IncomingEmail {
+  id                        String    @id @default(uuid())
+  firmId                    String    @map("firm_id")
+  messageId                 String    @map("message_id") @db.VarChar(500)
+  inReplyTo                 String?   @map("in_reply_to") @db.VarChar(500)
+  threadId                  String?   @map("thread_id") @db.VarChar(500)
+  fromAddress               String    @map("from_address") @db.VarChar(500)
+  toAddresses               String[]  @map("to_addresses")
+  ccAddresses               String[]  @map("cc_addresses")
+  subject                   String    @db.Text
+  receivedAt                DateTime  @map("received_at")
+  bodyText                  String?   @map("body_text") @db.Text
+  bodyHtml                  String?   @map("body_html") @db.Text
+  isInsurance               Boolean?  @map("is_insurance")
+  category                  String?   @db.VarChar(50) // policy_renewal, new_policy, claim, etc.
+  priority                  String?   @db.VarChar(20) // urgent, normal, low
+  classificationConfidence  Decimal?  @map("classification_confidence") @db.Decimal(3, 2)
+  status                    String    @default("pending_processing") @map("status") // pending_processing, processing, processed, not_insurance, error, duplicate
+  processedAt               DateTime? @map("processed_at")
+  errorMessage              String?   @map("error_message") @db.Text
+  rawUrl                    String?   @map("raw_url") @db.VarChar(500)
+  createdAt                 DateTime  @default(now()) @map("created_at")
+
+  firm                      Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  attachments               EmailAttachment[]
+  actions                   AgentAction[]
+
+  @@unique([firmId, messageId])
+  @@index([firmId, status])
+  @@index([firmId, receivedAt(sort: Desc)])
+  @@index([firmId, threadId])
+  @@map("incoming_emails")
+}
+
+model EmailAttachment {
+  id            String   @id @default(uuid())
+  emailId       String   @map("email_id")
+  firmId        String   @map("firm_id")
+  filename      String   @db.VarChar(255)
+  contentType   String?  @map("content_type") @db.VarChar(100)
+  sizeBytes     Int?     @map("size_bytes")
+  storageUrl    String?  @map("storage_url") @db.VarChar(500)
+  extractedText String?  @map("extracted_text") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  email         IncomingEmail @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  firm          Firm          @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+  @@map("email_attachments")
+}
+
+model AgentAction {
+  id               String    @id @default(uuid())
+  firmId           String    @map("firm_id")
+  emailId          String    @map("email_id")
+  actionType       String    @map("action_type") // update_policy, create_policy, create_client, update_claim, cancel_policy, flag_for_review, no_action
+  entityType       String?   @map("entity_type") // policy, client, claim, renewal
+  entityId         String?   @map("entity_id")
+  matchConfidence  Decimal?  @map("match_confidence") @db.Decimal(3, 2)
+  changes          Json      @default("{}")
+  confidence       Decimal   @db.Decimal(3, 2)
+  reasoning        String?   @db.Text
+  status           String    @default("pending") @map("status") // pending, confirmed, modified, rejected, executed
+  mode             String    @default("suggestion") @map("mode") // suggestion, auto
+  confirmedBy      String?   @map("confirmed_by")
+  confirmedAt      DateTime? @map("confirmed_at")
+  modifiedFields   Json?     @map("modified_fields")
+  rejectedReason   String?   @map("rejected_reason") @db.Text
+  executedAt       DateTime? @map("executed_at")
+  isReversed       Boolean   @default(false) @map("is_reversed")
+  reversedBy       String?   @map("reversed_by")
+  reversedAt       DateTime? @map("reversed_at")
+  reversalReason   String?   @map("reversal_reason") @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  firm             Firm          @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  email            IncomingEmail @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  modifications    AgentActionModification[]
+
+  @@index([firmId, status])
+  @@index([firmId, createdAt(sort: Desc)])
+  @@index([emailId])
+  @@index([entityType, entityId])
+  @@map("agent_actions")
+}
+
+model AgentActionModification {
+  id              String    @id @default(uuid())
+  actionId        String    @map("action_id")
+  firmId          String    @map("firm_id")
+  fieldName       String    @map("field_name") @db.VarChar(100)
+  originalValue   String?   @map("original_value") @db.Text
+  correctedValue  String?   @map("corrected_value") @db.Text
+  modifiedBy      String?   @map("modified_by")
+  modifiedAt      DateTime  @default(now()) @map("modified_at")
+
+  action          AgentAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  firm            Firm        @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([actionId])
+  @@map("agent_action_modifications")
+}
+
+model AgentMetricsDaily {
+  id                   String    @id @default(uuid())
+  firmId               String    @map("firm_id")
+  date                 DateTime  @db.Date
+  emailsReceived       Int       @default(0) @map("emails_received")
+  emailsProcessed      Int       @default(0) @map("emails_processed")
+  emailsNotInsurance   Int       @default(0) @map("emails_not_insurance")
+  actionsCreated       Int       @default(0) @map("actions_created")
+  actionsConfirmed     Int       @default(0) @map("actions_confirmed")
+  actionsModified      Int       @default(0) @map("actions_modified")
+  actionsRejected      Int       @default(0) @map("actions_rejected")
+  actionsAutoExecuted  Int       @default(0) @map("actions_auto_executed")
+  avgConfidence        Decimal?  @map("avg_confidence") @db.Decimal(3, 2)
+  avgProcessingTimeMs  Int?      @map("avg_processing_time_ms")
+  timeSavedMinutes     Int?      @map("time_saved_minutes")
+
+  firm                 Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@unique([firmId, date])
+  @@index([firmId, date(sort: Desc)])
+  @@map("agent_metrics_daily")
 }
