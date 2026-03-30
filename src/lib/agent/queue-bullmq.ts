@@ -127,6 +127,38 @@ function startWorkers() {
 // Auto-start workers when module loads (if Redis available)
 startWorkers();
 
+// ─── Schedule daily metrics aggregation ─────────────────────
+async function scheduleDailyMetrics() {
+  const q = getMetricsQueue();
+  if (!q) return;
+
+  // Remove any existing repeatable jobs
+  const repeatables = await q.getRepeatableJobs();
+  for (const job of repeatables) {
+    await q.removeRepeatableByKey(job.key);
+  }
+
+  // Add daily job at 00:05 UTC
+  await q.add('aggregate_metrics', {}, {
+    repeat: { pattern: '5 0 * * *' }, // cron: 5 minutes past midnight
+    removeOnComplete: 5,
+    removeOnFail: 10,
+  });
+
+  console.log('[BullMQ] Scheduled daily metrics aggregation at 00:05 UTC');
+}
+
+scheduleDailyMetrics().catch(err => {
+  console.error('[BullMQ] Failed to schedule metrics:', err.message);
+});
+
+// ─── Startup metrics run (in-memory fallback) ───────────────
+if (!getRedisConnection()) {
+  import('@/worker/agent-worker').then(({ aggregateDailyMetrics }) => {
+    aggregateDailyMetrics().catch(() => {});
+  });
+}
+
 // ─── Compatibility API ──────────────────────────────────────
 export interface QueueJob {
   type: 'process_email' | 'aggregate_metrics' | 'send_digest';
