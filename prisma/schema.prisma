@@ -410,6 +410,7 @@ model IncomingEmail {
   errorMessage              String?   @map("error_message") @db.Text
   rawUrl                    String?   @map("raw_url") @db.VarChar(500)
   pipelineStep              String?   @map("pipeline_step") @db.VarChar(50) // classify, desensitize, extract, match, action
+  processingStartedAt       DateTime? @map("processing_started_at")
   createdAt                 DateTime  @default(now()) @map("created_at")
 
   firm                      Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)

@@ -50,7 +50,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         // Set status to processing
         await prisma.incomingEmail.update({
           where: { id: emailId },
-          data: { status: 'processing', pipelineStep: 'classify' },
+          data: { status: 'processing', pipelineStep: 'classify', processingStartedAt: new Date() },
         });
 
         classification = await classifyEmail({
