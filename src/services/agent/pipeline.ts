@@ -5,6 +5,7 @@ import { desensitizePII, resensitize } from '@/lib/agent/pii';
 import { matchRecords } from '@/lib/agent/matcher';
 import { generateAction } from '@/lib/agent/action-generator';
 import { auditLog } from '@/lib/audit';
+import { publishAgentEvent } from '@/app/api/agent/events/route';
 
 export interface ProcessingResult {
   emailId: string;
@@ -76,8 +77,8 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         return { emailId, classification, action: null, autoExecuted: false };
       }
 
-      // Step 3: Desensitize PII
-      const bodyText = (email.bodyText || '') + '\n' + (email.bodyHtml || '');
+      // Step 3: Desensitize PII (bodyText only — bodyHtml has HTML tags that pollute LLM input)
+      const bodyText = email.bodyText || '';
       const { desensitized, tokens } = desensitizePII(bodyText);
 
       // Step 4: Extract data
@@ -200,6 +201,17 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         actionType: actionData.type,
         confidence: actionData.confidence,
         extractedFields: Object.keys(resensitized),
+      });
+
+      // SSE: notify frontend
+      publishAgentEvent(firmId, {
+        type: autoExecuted ? 'action_executed' : 'action_created',
+        data: {
+          id: action.id,
+          actionType: actionData.type,
+          confidence: actionData.confidence,
+          emailSubject: email.subject,
+        },
       });
 
       // Mark email as processed

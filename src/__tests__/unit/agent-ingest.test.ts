@@ -146,10 +146,10 @@ describe('POST /api/agent/ingest', () => {
       status: 'active',
     });
 
-    // Mock: duplicate exists
-    (prisma.incomingEmail.findFirst as any).mockResolvedValue({
-      id: 'existing-email',
-      messageId: 'test-msg-001@aviva.ie',
+    // Mock: create throws unique constraint violation (P2002)
+    (prisma.incomingEmail.create as any).mockRejectedValue({
+      code: 'P2002',
+      message: 'Unique constraint failed',
     });
 
     const { POST } = await import('@/app/api/agent/ingest/route');
@@ -159,8 +159,6 @@ describe('POST /api/agent/ingest', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('duplicate');
-    // Should NOT create new email record
-    expect(prisma.incomingEmail.create).not.toHaveBeenCalled();
   });
 
   it('extracts firm ID from recipient address', async () => {
