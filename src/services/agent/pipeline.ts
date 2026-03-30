@@ -79,7 +79,19 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
 
       // Step 3: Desensitize PII (bodyText only — bodyHtml has HTML tags that pollute LLM input)
       const bodyText = email.bodyText || '';
-      const { desensitized, tokens } = desensitizePII(bodyText);
+
+      // Include attachment text if available
+      const attachments = await prisma.emailAttachment.findMany({
+        where: { emailId },
+        select: { extractedText: true, filename: true },
+      });
+      const attachmentText = attachments
+        .filter(a => a.extractedText)
+        .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
+        .join('\n');
+
+      const fullContext = bodyText + attachmentText;
+      const { desensitized, tokens } = desensitizePII(fullContext);
 
       // Step 4: Extract data
       const extraction = await extractData(desensitized, classification.category, {
@@ -158,7 +170,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         }
       }
 
-      // Step 9: Check execution mode
+      // Step 9: Check execution mode (skip no_action and flag_for_review from auto-execute)
       const config = await prisma.emailIngressConfig.findUnique({
         where: { firmId },
       });
@@ -169,7 +181,9 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
 
       if (
         config?.executionMode === 'auto_execute' &&
-        actionData.confidence >= Number(config.confidenceThreshold || 0.95)
+        actionData.confidence >= Number(config.confidenceThreshold || 0.95) &&
+        actionData.type !== 'no_action' &&
+        actionData.type !== 'flag_for_review'
       ) {
         status = 'executed';
         mode = 'auto';

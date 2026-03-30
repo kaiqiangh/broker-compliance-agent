@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
+import { executeAction } from '@/lib/agent/action-executor';
 
 export const POST = withAuth(null, async (user, request) => {
   let actionIds: string[] = [];
@@ -43,19 +44,11 @@ export const POST = withAuth(null, async (user, request) => {
 
   for (const action of actions) {
     try {
-      // Execute action
-      if (action.actionType === 'update_policy' && action.entityId) {
-        const changes = action.changes as Record<string, { old: any; new: any }>;
-        const updateData: Record<string, any> = {};
-        for (const [field, diff] of Object.entries(changes)) {
-          if (field === 'premium') updateData.premium = diff.new;
-          else if (field === 'expiry_date') updateData.expiryDate = new Date(diff.new);
-          else if (field === 'ncb') updateData.ncb = diff.new;
-        }
-        if (Object.keys(updateData).length > 0) {
-          await prisma.policy.update({ where: { id: action.entityId }, data: updateData });
-        }
-      }
+      // Execute action (handles ALL action types)
+      await executeAction({
+        ...action,
+        changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
+      });
 
       // Mark confirmed
       await prisma.agentAction.update({

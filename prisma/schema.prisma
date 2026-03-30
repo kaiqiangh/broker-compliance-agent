@@ -375,6 +375,7 @@ model EmailIngressConfig {
   confidenceThreshold        Decimal   @default(0.95) @map("confidence_threshold") @db.Decimal(3, 2)
   processAttachments         Boolean   @default(true) @map("process_attachments")
   emailFolderFilter          String[]  @map("email_folder_filter")
+  insurerDomains             String[]  @default([]) @map("insurer_domains")
   status                     String    @default("active") @map("status") // active, paused, error, disconnected
   lastPolledAt               DateTime? @map("last_polled_at")
   lastError                  String?   @map("last_error") @db.Text

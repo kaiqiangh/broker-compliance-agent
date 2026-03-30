@@ -69,6 +69,22 @@ export const PUT = withAuth(null, async (user, request) => {
         data: restoreData,
       });
     }
+
+    // Revert linked renewal
+    if (changes.expiry_date) {
+      const renewal = await prisma.renewal.findFirst({
+        where: { policyId: action.entityId, status: { not: 'compliant' } },
+      });
+      if (renewal) {
+        await prisma.renewal.update({
+          where: { id: renewal.id },
+          data: {
+            dueDate: changes.expiry_date.old ? new Date(changes.expiry_date.old) : renewal.dueDate,
+            ...(changes.premium && { newPremium: changes.premium.old }),
+          },
+        });
+      }
+    }
   }
 
   // Mark as reversed

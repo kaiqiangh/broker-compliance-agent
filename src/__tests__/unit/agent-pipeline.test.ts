@@ -20,6 +20,9 @@ vi.mock('@/lib/prisma', () => ({
     emailIngressConfig: {
       findUnique: vi.fn(),
     },
+    emailAttachment: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
   runWithFirmContext: (_id: string, fn: () => any) => fn(),
 }));
@@ -47,6 +50,10 @@ vi.mock('@/lib/agent/action-generator', () => ({
 
 vi.mock('@/lib/audit', () => ({
   auditLog: vi.fn(),
+}));
+
+vi.mock('@/app/api/agent/events/route', () => ({
+  publishAgentEvent: vi.fn(),
 }));
 
 import { processEmail } from '../../services/agent/pipeline';
