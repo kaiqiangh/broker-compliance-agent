@@ -67,16 +67,25 @@ export const GET = withAuth(null, async (user, request) => {
         timeSavedMinutes,
         timeSavedHours: Math.round(timeSavedMinutes / 60 * 10) / 10,
       },
-      daily: metrics.map(m => ({
-        date: m.date,
-        emailsReceived: m.emailsReceived,
-        emailsProcessed: m.emailsProcessed,
-        actionsCreated: m.actionsCreated,
-        actionsConfirmed: m.actionsConfirmed,
-        actionsModified: m.actionsModified,
-        actionsRejected: m.actionsRejected,
-        avgConfidence: m.avgConfidence ? Number(m.avgConfidence) : null,
-      })),
+      daily: metrics.map(m => {
+        const dailyDecided = m.actionsConfirmed + m.actionsModified + m.actionsRejected;
+        return {
+          date: m.date,
+          emailsReceived: m.emailsReceived,
+          emailsProcessed: m.emailsProcessed,
+          actionsCreated: m.actionsCreated,
+          actionsConfirmed: m.actionsConfirmed,
+          actionsModified: m.actionsModified,
+          actionsRejected: m.actionsRejected,
+          avgConfidence: m.avgConfidence ? Number(m.avgConfidence) : null,
+          accuracyRate: dailyDecided > 0
+            ? Math.round(((m.actionsConfirmed + m.actionsModified) / dailyDecided) * 100)
+            : null,
+          strictAccuracy: dailyDecided > 0
+            ? Math.round((m.actionsConfirmed / dailyDecided) * 100)
+            : null,
+        };
+      }),
     },
   });
 });

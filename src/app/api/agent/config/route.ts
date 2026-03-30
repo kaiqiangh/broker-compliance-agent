@@ -10,6 +10,9 @@ const UpdateConfigSchema = z.object({
   confidenceThreshold: z.number().min(0.5).max(0.99).optional(),
   processAttachments: z.boolean().optional(),
   emailFolderFilter: z.array(z.string()).optional(),
+  notifyOnAction: z.enum(['all', 'pending', 'errors']).optional(),
+  notifyChannel: z.enum(['email', 'dashboard', 'both']).optional(),
+  notifyDigestMode: z.enum(['realtime', 'daily']).optional(),
 }).strict();
 
 export const GET = withAuth('agent:view_own', async (user, _request) => {
@@ -28,9 +31,22 @@ export const GET = withAuth('agent:view_own', async (user, _request) => {
       executionMode: config.executionMode,
       confidenceThreshold: Number(config.confidenceThreshold),
       processAttachments: config.processAttachments,
+      insurerDomains: config.insurerDomains,
       status: config.status,
       lastPolledAt: config.lastPolledAt,
       createdAt: config.createdAt,
+      // Notification preferences
+      notifyOnAction: config.notifyOnAction,
+      notifyChannel: config.notifyChannel,
+      notifyDigestMode: config.notifyDigestMode,
+      // Connection health
+      health: {
+        status: config.status,
+        lastPolledAt: config.lastPolledAt,
+        lastError: config.lastError,
+        errorCount: config.errorCount,
+        isHealthy: config.status === 'active' && config.errorCount < 5,
+      },
     },
   });
 });
@@ -63,6 +79,9 @@ export const PUT = withAuth('agent:configure', async (user, request) => {
       ...(body.confidenceThreshold !== undefined && { confidenceThreshold: body.confidenceThreshold }),
       ...(body.processAttachments !== undefined && { processAttachments: body.processAttachments }),
       ...(body.emailFolderFilter !== undefined && { emailFolderFilter: body.emailFolderFilter }),
+      ...(body.notifyOnAction !== undefined && { notifyOnAction: body.notifyOnAction }),
+      ...(body.notifyChannel !== undefined && { notifyChannel: body.notifyChannel }),
+      ...(body.notifyDigestMode !== undefined && { notifyDigestMode: body.notifyDigestMode }),
     },
     create: {
       firmId: user.firmId,

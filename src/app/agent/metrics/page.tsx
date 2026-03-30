@@ -24,6 +24,8 @@ interface DailyMetric {
   actionsModified: number;
   actionsRejected: number;
   avgConfidence: number | null;
+  accuracyRate: number | null;
+  strictAccuracy: number | null;
 }
 
 function StatCard({ label, value, suffix }: { label: string; value: string | number; suffix?: string }) {
@@ -58,6 +60,124 @@ function AccuracyRing({ rate }: { rate: number }) {
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="text-lg font-semibold text-gray-900">{rate}%</span>
       </div>
+    </div>
+  );
+}
+
+function AccuracyTrendChart({ daily }: { daily: DailyMetric[] }) {
+  const padding = { top: 16, right: 16, bottom: 32, left: 40 };
+  const width = 600;
+  const height = 200;
+  const innerW = width - padding.left - padding.right;
+  const innerH = height - padding.top - padding.bottom;
+
+  // Filter days that have accuracy data
+  const daysWithAccuracy = daily.map((d, i) => ({
+    ...d,
+    idx: i,
+    useful: d.accuracyRate ?? null,
+    strict: d.strictAccuracy ?? null,
+  }));
+
+  const hasAnyAccuracy = daysWithAccuracy.some(d => d.useful !== null);
+  if (!hasAnyAccuracy) {
+    return (
+      <div className="flex items-center justify-center h-48 text-sm text-gray-400">
+        No accuracy data yet — check back after actions are decided
+      </div>
+    );
+  }
+
+  // Build line points (skip nulls, interpolate visually by gaps)
+  function linePoints(key: 'useful' | 'strict') {
+    const pts: { x: number; y: number; date: string; val: number }[] = [];
+    daysWithAccuracy.forEach(d => {
+      const val = d[key];
+      if (val === null) return;
+      const x = padding.left + (d.idx / Math.max(daily.length - 1, 1)) * innerW;
+      const y = padding.top + innerH - (val / 100) * innerH;
+      pts.push({ x, y, date: d.date, val });
+    });
+    return pts;
+  }
+
+  const usefulPts = linePoints('useful');
+  const strictPts = linePoints('strict');
+
+  // Y-axis ticks
+  const yTicks = [0, 25, 50, 75, 100];
+
+  // X-axis labels (first, middle, last)
+  const dateLabels = [
+    daily[0],
+    daily[Math.floor(daily.length / 2)],
+    daily[daily.length - 1],
+  ].filter(Boolean).map(d => d.date);
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 mb-3">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-0.5 rounded" style={{ background: '#6366f1' }} />
+          <span className="text-xs text-gray-500">Useful rate</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-0.5 rounded" style={{ background: '#10b981' }} />
+          <span className="text-xs text-gray-500">Strict rate</span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height: '12rem' }}>
+        {/* Grid lines */}
+        {yTicks.map(tick => {
+          const y = padding.top + innerH - (tick / 100) * innerH;
+          return (
+            <g key={tick}>
+              <line
+                x1={padding.left} y1={y}
+                x2={padding.left + innerW} y2={y}
+                stroke="#f3f4f6" strokeWidth="1"
+              />
+              <text x={padding.left - 8} y={y + 4} textAnchor="end" className="fill-gray-400" style={{ fontSize: 10 }}>
+                {tick}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Useful line */}
+        {usefulPts.length > 1 && (
+          <polyline
+            points={usefulPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+            fill="none" stroke="#6366f1" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+          />
+        )}
+        {/* Strict line */}
+        {strictPts.length > 1 && (
+          <polyline
+            points={strictPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+            fill="none" stroke="#10b981" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+          />
+        )}
+
+        {/* Dots for useful */}
+        {usefulPts.map((p, i) => (
+          <circle key={`u-${i}`} cx={p.x} cy={p.y} r="3" fill="#6366f1" />
+        ))}
+        {/* Dots for strict */}
+        {strictPts.map((p, i) => (
+          <circle key={`s-${i}`} cx={p.x} cy={p.y} r="3" fill="#10b981" />
+        ))}
+
+        {/* Date labels */}
+        {dateLabels.map((date, i) => {
+          const x = padding.left + (i === 0 ? 0 : i === 1 ? innerW / 2 : innerW);
+          return (
+            <text key={date} x={x} y={height - 8} textAnchor="middle" className="fill-gray-400" style={{ fontSize: 10 }}>
+              {date}
+            </text>
+          );
+        })}
+      </svg>
     </div>
   );
 }
@@ -139,6 +259,14 @@ export default function AgentMetricsPage() {
           </div>
         </div>
       </div>
+
+      {/* Accuracy trend chart */}
+      {daily.length > 0 && (
+        <div className="border border-gray-200 rounded-lg p-6">
+          <p className="text-xs text-gray-500 mb-4">Accuracy Trend (last 30 days)</p>
+          <AccuracyTrendChart daily={daily} />
+        </div>
+      )}
 
       {/* Daily chart (simple bar chart) */}
       {daily.length > 0 && (

@@ -274,6 +274,79 @@ export default function AgentConfigPage() {
           }`} />
           <span className="text-sm text-gray-700 capitalize">{config.status}</span>
         </div>
+        {config.health?.lastError && (
+          <p className="text-xs text-red-600 mt-1">Error: {config.health.lastError}</p>
+        )}
+      </section>
+
+      {/* Notifications */}
+      <section>
+        <h2 className="text-sm font-semibold text-gray-900 mb-1">Notifications</h2>
+        <p className="text-xs text-gray-500 mb-4">Control when and how you're notified about agent actions.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs font-medium text-gray-500">When to notify</label>
+            <select
+              value={config.notifyOnAction || 'pending'}
+              onChange={(e) => saveConfig({ notifyOnAction: e.target.value })}
+              className="mt-1 block w-full border border-gray-200 rounded-md p-2 text-sm"
+            >
+              <option value="all">All actions</option>
+              <option value="pending">Only pending</option>
+              <option value="errors">Only errors</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">Channel</label>
+            <select
+              value={config.notifyChannel || 'dashboard'}
+              onChange={(e) => saveConfig({ notifyChannel: e.target.value })}
+              className="mt-1 block w-full border border-gray-200 rounded-md p-2 text-sm"
+            >
+              <option value="dashboard">Dashboard only</option>
+              <option value="email">Email</option>
+              <option value="both">Both</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">Email digest</label>
+            <select
+              value={config.notifyDigestMode || 'realtime'}
+              onChange={(e) => saveConfig({ notifyDigestMode: e.target.value })}
+              className="mt-1 block w-full border border-gray-200 rounded-md p-2 text-sm"
+            >
+              <option value="realtime">Real-time</option>
+              <option value="daily">Daily summary</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Insurer Domains */}
+      <section>
+        <h2 className="text-sm font-semibold text-gray-900 mb-1">Insurer Domains</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Emails from these domains are classified as insurance with high confidence.
+        </p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {(config.insurerDomains || []).length === 0 && (
+            <span className="text-xs text-gray-400">Using default insurer domains</span>
+          )}
+          {(config.insurerDomains || []).map((domain: string) => (
+            <span key={domain} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm">
+              {domain}
+              <button
+                onClick={() => {
+                  const updated = (config.insurerDomains || []).filter((d: string) => d !== domain);
+                  saveConfig({ insurerDomains: updated });
+                }}
+                className="text-gray-400 hover:text-red-500 ml-1"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
       </section>
     </div>
   );
