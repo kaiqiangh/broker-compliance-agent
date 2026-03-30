@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
 import { executeAction } from '@/lib/agent/action-executor';
 
-export const POST = withAuth(null, async (user, request) => {
+export const POST = withAuth('agent:bulk_confirm', async (user, request) => {
   let actionIds: string[] = [];
   try {
     const body = await request.json();

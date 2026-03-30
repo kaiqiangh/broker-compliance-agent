@@ -3,7 +3,7 @@ import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
 
-export const PUT = withAuth(null, async (user, request) => {
+export const PUT = withAuth('agent:modify_action', async (user, request) => {
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];

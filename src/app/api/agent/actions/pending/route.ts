@@ -4,11 +4,19 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-export const GET = withAuth(null, async (user, _request) => {
+export const GET = withAuth('agent:view_own', async (user, _request) => {
+  const isRestricted = user.role === 'adviser' || user.role === 'read_only';
+
   const actions = await prisma.agentAction.findMany({
     where: {
       firmId: user.firmId,
       status: 'pending',
+      ...(isRestricted && {
+        OR: [
+          { confirmedBy: user.id },
+          { status: 'pending' },
+        ],
+      }),
     },
     orderBy: [
       { confidence: 'desc' }, // High confidence first

@@ -5,7 +5,7 @@ import { auditLog } from '@/lib/audit';
 import { executeAction } from '@/lib/agent/action-executor';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
 
-export const PUT = withAuth(null, async (user, request) => {
+export const PUT = withAuth('agent:confirm_action', async (user, request) => {
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
