@@ -55,36 +55,104 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
   // Reverse the action
   const changes = action.changes as Record<string, { old: any; new: any }>;
 
-  if (action.actionType === 'update_policy' && action.entityId) {
-    // Restore old values
-    const restoreData: Record<string, any> = {};
-    for (const [field, diff] of Object.entries(changes)) {
-      if (field === 'premium') restoreData.premium = diff.old;
-      else if (field === 'expiry_date') restoreData.expiryDate = diff.old ? new Date(diff.old) : null;
-      else if (field === 'ncb') restoreData.ncb = diff.old;
-    }
-    if (Object.keys(restoreData).length > 0) {
-      await prisma.policy.update({
-        where: { id: action.entityId },
-        data: restoreData,
-      });
+  switch (action.actionType) {
+    case 'update_policy': {
+      if (action.entityId) {
+        const restoreData: Record<string, any> = {};
+        for (const [field, diff] of Object.entries(changes)) {
+          if (field === 'premium') restoreData.premium = diff.old;
+          else if (field === 'expiry_date') restoreData.expiryDate = diff.old ? new Date(diff.old) : null;
+          else if (field === 'ncb') restoreData.ncb = diff.old;
+        }
+        if (Object.keys(restoreData).length > 0) {
+          await prisma.policy.update({
+            where: { id: action.entityId, firmId: user.firmId },
+            data: restoreData,
+          });
+        }
+
+        // Revert linked renewal
+        if (changes.expiry_date) {
+          const renewal = await prisma.renewal.findFirst({
+            where: { policyId: action.entityId, status: { not: 'compliant' } },
+          });
+          if (renewal) {
+            await prisma.renewal.update({
+              where: { id: renewal.id },
+              data: {
+                dueDate: changes.expiry_date.old ? new Date(changes.expiry_date.old) : renewal.dueDate,
+                ...(changes.premium && { newPremium: changes.premium.old }),
+              },
+            });
+          }
+        }
+      }
+      break;
     }
 
-    // Revert linked renewal
-    if (changes.expiry_date) {
-      const renewal = await prisma.renewal.findFirst({
-        where: { policyId: action.entityId, status: { not: 'compliant' } },
-      });
-      if (renewal) {
-        await prisma.renewal.update({
-          where: { id: renewal.id },
-          data: {
-            dueDate: changes.expiry_date.old ? new Date(changes.expiry_date.old) : renewal.dueDate,
-            ...(changes.premium && { newPremium: changes.premium.old }),
-          },
+    case 'cancel_policy': {
+      if (action.entityId) {
+        const policy = await prisma.policy.findFirst({
+          where: { id: action.entityId, firmId: user.firmId },
         });
+        if (policy) {
+          await prisma.policy.update({
+            where: { id: action.entityId },
+            data: { policyStatus: 'active' },
+          });
+        }
       }
+      break;
     }
+
+    case 'create_policy': {
+      if (action.entityId) {
+        const policy = await prisma.policy.findFirst({
+          where: { id: action.entityId, firmId: user.firmId },
+        });
+        if (policy) {
+          await prisma.policy.update({
+            where: { id: action.entityId },
+            data: { policyStatus: 'reversed' },
+          });
+        }
+      }
+      break;
+    }
+
+    case 'create_client': {
+      const clientName = changes.name?.new;
+      if (clientName) {
+        const client = await prisma.client.findFirst({
+          where: { firmId: user.firmId, name: clientName },
+        });
+        if (client) {
+          const policyCount = await prisma.policy.count({
+            where: { clientId: client.id },
+          });
+          if (policyCount > 0) {
+            return NextResponse.json(
+              { error: { code: 'CONFLICT', message: 'Cannot reverse: client has associated policies' } },
+              { status: 409 }
+            );
+          }
+          await prisma.client.delete({ where: { id: client.id } });
+        }
+      }
+      break;
+    }
+
+    case 'flag_for_review':
+    case 'no_action': {
+      // Nothing to reverse — these don't mutate DB
+      break;
+    }
+
+    default:
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: `Reversal not supported for action type: ${action.actionType}` } },
+        { status: 400 }
+      );
   }
 
   // Mark as reversed
