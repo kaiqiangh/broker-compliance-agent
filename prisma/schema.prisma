@@ -376,6 +376,9 @@ model EmailIngressConfig {
   processAttachments         Boolean   @default(true) @map("process_attachments")
   emailFolderFilter          String[]  @map("email_folder_filter")
   insurerDomains             String[]  @default([]) @map("insurer_domains")
+  notifyOnAction             String    @default("pending") @map("notify_on_action") @db.VarChar(20)
+  notifyChannel              String    @default("dashboard") @map("notify_channel") @db.VarChar(20)
+  notifyDigestMode           String    @default("realtime") @map("notify_digest_mode") @db.VarChar(20)
   status                     String    @default("active") @map("status") // active, paused, error, disconnected
   lastPolledAt               DateTime? @map("last_polled_at")
   lastError                  String?   @map("last_error") @db.Text
