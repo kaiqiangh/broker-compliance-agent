@@ -14,6 +14,8 @@ interface AgentAction {
   reasoning: string | null;
   status: string;
   createdAt: string;
+  isReversed?: boolean;
+  rejectedReason?: string | null;
   email: {
     id: string;
     subject: string;
@@ -257,6 +259,8 @@ export default function AgentDashboardPage() {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'activity'>('pending');
+  const [mainTab, setMainTab] = useState<'pending' | 'history'>('pending');
+  const [historyActions, setHistoryActions] = useState<AgentAction[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Fetch pending actions
@@ -359,6 +363,49 @@ export default function AgentDashboardPage() {
     }
   };
 
+  // Load history actions (non-pending)
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/actions');
+      if (!res.ok) throw new Error('Failed to fetch history');
+      const data = await res.json();
+      setHistoryActions(data.data?.filter((a: any) => a.status !== 'pending') || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load history');
+    }
+  }, []);
+
+  // Load history when history tab is selected
+  useEffect(() => {
+    if (mainTab === 'history') {
+      loadHistory();
+    }
+  }, [mainTab, loadHistory]);
+
+  // Reverse action
+  const handleReverse = async (actionId: string) => {
+    const reason = window.prompt('Reason for reversal (optional):');
+    if (reason === null) return; // User cancelled
+
+    setLoading(actionId);
+    try {
+      const res = await fetch(`/api/agent/actions/${actionId}/reverse`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || '' }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error?.message || 'Failed to reverse action');
+      }
+      loadHistory(); // Refresh history
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reverse action');
+    } finally {
+      setLoading(null);
+    }
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -399,8 +446,84 @@ export default function AgentDashboardPage() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Main content: Pending actions */}
+      {/* Main content: Pending actions / History */}
       <div className="lg:col-span-2 space-y-4">
+        {/* Main tab switcher */}
+        <div className="flex border-b mb-4">
+          <button
+            onClick={() => setMainTab('pending')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 ${
+              mainTab === 'pending'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Pending ({pendingCount})
+          </button>
+          <button
+            onClick={() => setMainTab('history')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 ${
+              mainTab === 'history'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            History
+          </button>
+        </div>
+
+        {mainTab === 'history' ? (
+          /* History content */
+          <div className="space-y-3">
+            {historyActions.map((action) => (
+              <div key={action.id} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{action.email?.subject || 'Unknown email'}</p>
+                    <p className="text-sm text-gray-600">
+                      {action.actionType} • {action.entityType || 'N/A'}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(action.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      action.status === 'executed' || action.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                      action.status === 'modified' ? 'bg-blue-100 text-blue-800' :
+                      action.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {action.status}
+                    </span>
+                    {(action.status === 'executed' || action.status === 'confirmed') && !action.isReversed && (
+                      <button
+                        onClick={() => handleReverse(action.id)}
+                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1 border border-red-200 rounded hover:bg-red-50"
+                      >
+                        Reverse
+                      </button>
+                    )}
+                    {action.isReversed && (
+                      <span className="text-xs text-gray-500">Reversed</span>
+                    )}
+                  </div>
+                </div>
+                {action.confidence != null && (
+                  <ConfidenceBar value={action.confidence} />
+                )}
+                {action.reasoning && (
+                  <p className="text-sm text-gray-500 mt-1">{action.reasoning}</p>
+                )}
+              </div>
+            ))}
+            {historyActions.length === 0 && (
+              <p className="text-center text-gray-500 py-8">No history yet</p>
+            )}
+          </div>
+        ) : (
+          /* Pending content */
+          <>
         {/* Stats bar */}
         <div className="flex items-center gap-6 text-sm">
           <div>
@@ -460,6 +583,8 @@ export default function AgentDashboardPage() {
               />
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
 
