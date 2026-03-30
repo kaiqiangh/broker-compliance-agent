@@ -81,9 +81,16 @@ export default function AgentConfigPage() {
   const saveConfig = async (updates: Partial<AgentConfig>) => {
     setSaving(true);
     try {
+      // Include CSRF token
+      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+      const csrfToken = csrfMatch?.[1] || '';
+      
       const res = await fetch('/api/agent/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        },
         body: JSON.stringify(updates),
       });
       if (!res.ok) throw new Error('Failed to save');
