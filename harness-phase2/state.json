@@ -1,0 +1,29 @@
+{
+  "experiment": "harness-phase2",
+  "started": null,
+  "completed": null,
+  "config": {
+    "max_retries": 3,
+    "repo": "."
+  },
+  "summary": {
+    "total": 11,
+    "done": 0,
+    "escalated": 0,
+    "skipped": 0,
+    "total_attempts": 0
+  },
+  "tasks": {
+    "P2-1": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-2": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-3": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-4": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-5": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-6": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-7": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-8": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-10": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-11": { "status": "pending", "attempts": 0, "last_eval": null },
+    "P2-12": { "status": "pending", "attempts": 0, "last_eval": null }
+  }
+}

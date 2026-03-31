@@ -1,0 +1,264 @@
+{
+  "repo": ".",
+  "created": "2026-03-31T20:27:00+01:00",
+  "plan": "docs/PHASE-2-PLAN.md",
+  "config": {
+    "max_retries": 3,
+    "timeout_seconds": 600
+  },
+  "tasks": [
+    {
+      "id": "P2-1",
+      "title": "Auto-Execute UI + Undo flow",
+      "description": "Add executionMode toggle to config page + auto-execute notification + undo audit event.",
+      "context": "Config API already supports executionMode (Zod: suggestion|auto_execute). Config page at src/app/agent/config/page.tsx (360 lines) has no toggle. Reverse endpoint at PUT /api/agent/actions/[id]/reverse already has 24h window check. Pipeline at src/services/agent/pipeline.ts has auto-execute logic. Notifications at src/services/agent/notifications.ts.",
+      "steps": [
+        "Read src/app/agent/config/page.tsx for current UI structure",
+        "Add AgentModeSection component: Radio buttons (suggestion/auto_execute), warning alert when auto_execute selected, save via PUT /api/agent/config",
+        "Read src/services/agent/pipeline.ts — find where auto-execute happens, add sendAutoExecuteNotification() call",
+        "Create sendAutoExecuteNotification() in src/services/agent/notifications.ts — email with undo link",
+        "Add agent.action_auto_undone audit event in reverse route when auto-executed action is reversed",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "Config page has executionMode toggle that calls PUT /api/agent/config",
+        "Auto-execute warning alert visible when mode is auto_execute",
+        "Pipeline calls sendAutoExecuteNotification after auto-execute",
+        "Reverse route logs agent.action_auto_undone for auto-executed actions",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-2",
+      "title": "Learning feedback loop",
+      "description": "Inject learning insights into extractor prompt + low confidence fields marking + dashboard learning display.",
+      "context": "Learning module at src/lib/agent/learning.ts exports getLearningInsights(firmId) returning [{field, commonMistake, suggestedFix, occurrences}]. Extractor at src/lib/agent/extractor.ts (107 lines) has no learning injection. Action generator at src/lib/agent/action-generator.ts. Metrics page at src/app/agent/metrics/page.tsx (301 lines). API GET /api/agent/learning returns insights + accuracy.",
+      "steps": [
+        "Read src/lib/agent/extractor.ts for extractData() function signature and prompt templates",
+        "Modify extractData() to accept firmId, call getLearningInsights(), inject correction patterns (occurrences>=2, max 5) into prompt",
+        "Read src/lib/agent/action-generator.ts — add lowConfidenceFields detection, append to reasoning field as [Low confidence fields: ...]",
+        "Read src/app/agent/metrics/page.tsx — add Learning Insights table section (Field | Common Mistake | Suggested Fix | Occurrences)",
+        "Update pipeline.ts to pass firmId to extractData()",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "extractData() accepts firmId and injects learning insights into prompt when occurrences >= 2",
+        "Max 5 insights injected per extraction",
+        "Action reasoning includes [Low confidence fields: ...] marker when applicable",
+        "Metrics page shows Learning Insights table",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-3",
+      "title": "Fuzzy matching enhancement",
+      "description": "Dynamic threshold based on classification confidence + multi-field (name+insurer) matching + match confidence to DB.",
+      "context": "Matcher at src/lib/agent/matcher.ts has similarity() function with hardcoded threshold 0.7. AgentAction model has matchConfidence Decimal? field. Pipeline passes classification.confidence but matcher doesn't use it.",
+      "steps": [
+        "Read src/lib/agent/matcher.ts for current matchRecords() and similarity() logic",
+        "Add classificationConfidence param to matchRecords(): >=0.9→0.85, >=0.7→0.75, <0.7→0.65",
+        "Add multi-field fallback: when policy number fails, try name_similarity*0.6 + insurer_exact*0.4 >= 0.8",
+        "Update pipeline.ts to pass classification.confidence to matchRecords()",
+        "Ensure action-generator.ts writes matchConfidence to AgentAction",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "matchRecords() uses dynamic threshold based on classificationConfidence",
+        "Multi-field matching (name+insurer) works when policy number fails",
+        "AgentAction.matchConfidence correctly recorded in DB",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-4",
+      "title": "Notification preferences",
+      "description": "Add notification preference fields to schema + config API + config UI + respect preferences in notification functions.",
+      "context": "EmailIngressConfig model in prisma/schema.prisma has no notification fields. Config API at src/app/api/agent/config/route.ts. Config page at src/app/agent/config/page.tsx. Notifications at src/services/agent/notifications.ts.",
+      "steps": [
+        "Read prisma/schema.prisma for EmailIngressConfig model",
+        "Add fields: digestEnabled Boolean @default(true), digestTime String @default('08:00'), urgentNotifications Boolean @default(true)",
+        "Run npx prisma migrate dev --name add_notification_prefs",
+        "Update config/route.ts GET/PUT to handle new fields",
+        "Add notification settings section to config/page.tsx (toggles + time picker)",
+        "Modify sendDailyDigest() to check digestEnabled, sendUrgentNotification() to check urgentNotifications",
+        "Add checkAccuracyTrend(firmId) — 3 consecutive days declining → alert email",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "Schema migration adds 3 notification fields to EmailIngressConfig",
+        "npx prisma validate passes",
+        "Config page has notification settings section",
+        "Notification functions respect preference flags",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-5",
+      "title": "OCR activation",
+      "description": "Install tesseract.js + pdf2pic, add scanned PDF fallback to OCR.",
+      "context": "attachment-extractor.ts already has ocrImage() with dynamic import('tesseract.js'). PDF handling uses pdf-parse. Need to check package.json for existing deps.",
+      "steps": [
+        "Check package.json for tesseract.js and pdf2pic",
+        "npm install missing packages",
+        "In attachment-extractor.ts PDF handler: if extracted text < 50 chars, fallback to OCR via pdf2pic+tesseract",
+        "Write unit test: mock tesseract.js, verify fallback path",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "tesseract.js and pdf2pic in package.json",
+        "Scanned PDF (<50 chars) falls back to OCR",
+        "Image attachments use OCR",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-6",
+      "title": "Dashboard charts enhancement",
+      "description": "Complete metrics page with pie chart, line chart (7d/14d/30d), bar chart, number cards.",
+      "context": "Metrics page at src/app/agent/metrics/page.tsx (301 lines) already has SVG pie chart + line chart. API GET /api/agent/metrics returns aggregated data.",
+      "steps": [
+        "Read src/app/agent/metrics/page.tsx for existing chart components",
+        "Enhance: action status pie chart (confirmed/modified/rejected/pending/auto)",
+        "Enhance: accuracy trend line chart with 7d/14d/30d toggle",
+        "Add: daily email volume bar chart (30d)",
+        "Add: 4 number cards (total processed, accuracy rate, avg confidence, time saved)",
+        "Update GET /api/agent/metrics to accept ?range=7d|14d|30d",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "Pie chart shows action status distribution",
+        "Line chart shows accuracy trend with time range toggle",
+        "Bar chart shows daily email volume",
+        "4 number cards render correct data",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-7",
+      "title": "CSV export",
+      "description": "Add CSV export endpoints for actions and emails + export buttons in dashboard.",
+      "context": "Existing CSV parser at src/lib/csv-parser.ts (for import). Actions API at src/app/api/agent/actions/. Emails API at src/app/api/agent/emails/.",
+      "steps": [
+        "Create GET /api/agent/actions/export?format=csv&from=&to= — returns CSV with Content-Disposition header",
+        "Create GET /api/agent/emails/export?format=csv&from=&to= — returns CSV",
+        "Add rate limit 5/min per user to both endpoints",
+        "Add Export CSV button to dashboard actions list and emails list",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "Export endpoints return CSV with correct headers",
+        "CSV contains all key fields",
+        "Date range filtering works",
+        "Export buttons trigger file download",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-8",
+      "title": "Email threading enhancement",
+      "description": "Inject thread context into extractor prompt + enhance action detail thread view.",
+      "context": "Pipeline Step 8.5 already merges same-thread actions. Actions/[id] page returns threadEmails array. Dashboard has ThreadHistory component. Extractor currently sees only single email.",
+      "steps": [
+        "Read src/lib/agent/extractor.ts — add optional threadContext param to extractData()",
+        "Read src/services/agent/pipeline.ts — before extract step, if threadId exists, query last 3 emails in thread, truncate each to 200 chars, cap total at 1000 chars",
+        "Pass thread context to extractor prompt as '### Thread Context' section",
+        "Read src/app/agent/actions/[id]/page.tsx — ensure thread timeline shows with expandable emails, current email highlighted",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "Thread context injected into extractor prompt (max 1000 chars)",
+        "Action detail page shows thread timeline with expandable entries",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-10",
+      "title": "IMAP direct connect",
+      "description": "New IMAP connector + poller + config API + UI + worker integration.",
+      "context": "PRD §4.2 Mode B. ENG §2.2 IMAP Polling Worker. EmailIngressConfig model has provider, imapHost, imapPort, imapUsername, imapPasswordEncrypted fields. Existing OAuth routes at src/app/api/agent/oauth/. Crypto at src/lib/email/oauth/crypto.ts (AES-256-GCM). Worker at src/worker/agent-worker.ts.",
+      "steps": [
+        "npm install imapflow",
+        "Create src/lib/email/imap/connector.ts — connectIMAP(host, port, username, password) using ImapFlow with TLS",
+        "Create src/lib/email/imap/poller.ts — pollIMAPConnection(config): connect → fetch unseen since lastPoll → parse → store → update lastPolledAt. 10 consecutive errors → status=error",
+        "Create POST /api/agent/oauth/imap/connect — test connection, encrypt credentials, save",
+        "Create POST /api/agent/oauth/imap/disconnect — clear config",
+        "Add IMAP section to config/page.tsx — server dropdown (Gmail/Outlook/Custom), email+password inputs, test button",
+        "Worker: add pollIMAPConnections() job, run every 60s",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "IMAP credentials saved encrypted in EmailIngressConfig",
+        "Poller fetches unseen emails and creates IncomingEmail records",
+        "Config page has IMAP setup form",
+        "Worker polls IMAP connections every 60s",
+        "Gmail + Outlook + Custom IMAP supported",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-11",
+      "title": "Security audit",
+      "description": "OWASP checks + PII leakage verification + dependency scan.",
+      "context": "PRD §10 Non-Functional Requirements. ADR-013 PII Handling. All agent routes at src/app/api/agent/.",
+      "steps": [
+        "Grep $queryRaw/$executeRaw for SQL injection — verify parameterized",
+        "Grep dangerouslySetInnerHTML for XSS — verify sanitization",
+        "Verify all mutation endpoints use POST/PUT/DELETE, no GET writes",
+        "Verify all agent endpoints have withAuth (except: oauth callbacks, health, ingest)",
+        "Create src/__tests__/unit/agent-pii-leakage.test.ts — verify LLM request body has no raw PII",
+        "Run npm audit --audit-level=high, fix high/critical",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "No SQL injection vectors (all raw SQL parameterized)",
+        "No XSS vectors (no unsanitized dangerouslySetInnerHTML)",
+        "All agent endpoints authenticated (4 legitimate exemptions noted)",
+        "PII leakage test passes",
+        "npm audit shows 0 high/critical",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "P2-12",
+      "title": "Performance optimization",
+      "description": "Pipeline parallelization + DB query optimization + worker batch tuning.",
+      "context": "Pipeline at src/services/agent/pipeline.ts runs serially. classify and desensitize have no dependency. processPendingEmails() hardcoded batch=10.",
+      "steps": [
+        "Parallelize classify + desensitize in pipeline.ts using Promise.all",
+        "Check GET /api/agent/actions for N+1 queries, add proper includes",
+        "Check GET /api/agent/metrics — optimize to fewer DB round-trips",
+        "Make batch size configurable via AGENT_BATCH_SIZE env var (default 10)",
+        "Add concurrency limit to aggregateDailyMetrics() firm iteration (max 5 parallel)",
+        "Run npx vitest run"
+      ],
+      "criteria": [
+        "Pipeline uses Promise.all for classify + desensitize",
+        "No N+1 queries in actions API",
+        "AGENT_BATCH_SIZE env var controls batch size",
+        "npx vitest run shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    }
+  ]
+}
