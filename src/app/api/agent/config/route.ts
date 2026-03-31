@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const UpdateConfigSchema = z.object({
   executionMode: z.enum(['suggestion', 'auto_execute']).optional(),
@@ -16,6 +17,11 @@ const UpdateConfigSchema = z.object({
 }).strict();
 
 export const GET = withAuth('agent:view_own', async (user, _request) => {
+  const rl = await checkRateLimit(`api:config:get:${user.id}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   const config = await prisma.emailIngressConfig.findUnique({
     where: { firmId: user.firmId },
   });
@@ -52,6 +58,11 @@ export const GET = withAuth('agent:view_own', async (user, _request) => {
 });
 
 export const PUT = withAuth('agent:configure', async (user, request) => {
+  const rl = await checkRateLimit(`api:config:put:${user.id}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   let body: z.infer<typeof UpdateConfigSchema>;
   try {
     const raw = await request.json();

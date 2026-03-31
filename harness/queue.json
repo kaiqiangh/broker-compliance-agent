@@ -1,0 +1,159 @@
+{
+  "repo": ".",
+  "created": "2026-03-31T16:30:00+01:00",
+  "config": {
+    "max_retries": 3,
+    "timeout_seconds": 600
+  },
+  "tasks": [
+    {
+      "id": "RLS",
+      "title": "Add RLS policies to agent tables",
+      "description": "Using superpower skills. Add PostgreSQL Row-Level Security policies to the 6 agent tables via SQL migration. Each firm must only see its own data at the database level.",
+      "context": "Prisma does NOT support @@policy directives — use a raw SQL migration file in prisma/migrations/. Follow the existing pattern from 001_rls/migration.sql which uses `get_current_firm_id()` session variable. The 6 tables (EmailIngressConfig, IncomingEmail, EmailAttachment, AgentAction, AgentActionModification, AgentMetricsDaily) all have firmId field mapped to firm_id column in DB. Application-level filtering already exists in all API routes.",
+      "steps": [
+        "Read prisma/migrations/001_rls/migration.sql to understand the existing RLS pattern",
+        "Create prisma/migrations/XXX_rls_agent_tables/migration.sql",
+        "Enable RLS on all 6 tables: ALTER TABLE ... ENABLE ROW LEVEL SECURITY",
+        "Create policy using USING (firm_id = get_current_firm_id()) WITH CHECK (firm_id = get_current_firm_id())",
+        "Run `npx prisma validate`",
+        "Run `npx vitest run` to verify no regressions"
+      ],
+      "criteria": [
+        "Migration SQL file exists with RLS policies for all 6 agent tables",
+        "Each table has policy using get_current_firm_id() for SELECT/INSERT/UPDATE/DELETE",
+        "`npx prisma validate` passes without errors",
+        "`npx vitest run` shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "RATE-LIMIT",
+      "title": "Add rate limiting to agent API endpoints",
+      "description": "Using superpower skills. Apply the existing rate limiter to all agent API routes that don't already have it.",
+      "context": "Rate limiter at src/lib/rate-limit.ts exports `applyRateLimit(group, firmId, max, windowMs)` which returns `{ response, headers }`. Usage pattern: `const rl = await applyRateLimit('group', user.firmId, 60, 60_000); if (rl.response) return rl.response;`. Agent endpoints are under src/app/api/agent/ with subdirs: actions (8 routes), config (4 routes), emails (2 routes), events, health, ingest, learning, metrics, oauth (4 routes). Ingest already uses checkRateLimit — do NOT double-apply. Limits: ingest 100/min per firm, actions 60/min per user, config/test 5/min per user.",
+      "steps": [
+        "Read src/lib/rate-limit.ts to understand applyRateLimit API",
+        "Grep all route.ts under src/app/api/agent/ for existing rate limit calls",
+        "Add applyRateLimit to routes that don't have it",
+        "Run `npx vitest run` — if rate limiter state causes test failures, mock applyRateLimit in affected test files"
+      ],
+      "criteria": [
+        "Every agent API route file has rate limiting (applyRateLimit or checkRateLimit)",
+        "`npx vitest run` shows 0 new failures",
+        "No duplicate rate limiting on ingest endpoint"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "DETAIL-PAGE",
+      "title": "Create agent action detail page",
+      "description": "Using superpower skills. Create a standalone page at /agent/actions/[id] showing full details of a single agent action.",
+      "context": "Dashboard (src/app/agent/page.tsx, 718 lines) has inline action cards as reference. API: GET /api/agent/actions/[id] returns action with email data. Layout at src/app/agent/layout.tsx. Page needs: email preview (HTML/text toggle), extracted data fields (old → new), action controls (confirm/modify/reject), audit trail timeline.",
+      "steps": [
+        "Read src/app/agent/page.tsx to understand existing action card UI and data fetching patterns",
+        "Read src/app/api/agent/actions/[id]/route.ts to understand API response shape",
+        "Create src/app/agent/actions/[id]/page.tsx with two-column layout",
+        "Run `npx tsc --noEmit` to verify TypeScript",
+        "Run `npx vitest run` to verify no regressions"
+      ],
+      "criteria": [
+        "File src/app/agent/actions/[id]/page.tsx exists with >100 lines",
+        "Page renders: type, status, confidence, changes, email content, confirm/modify/reject controls, audit trail",
+        "`npx tsc --noEmit` has 0 errors from new file",
+        "`npx vitest run` shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "NOTIFY",
+      "title": "Implement agent notification system",
+      "description": "Using superpower skills. Build notification system: daily digest email + urgent notifications for high-priority items.",
+      "context": "Existing renewal notifications at src/services/notification-service.ts (reference pattern). EmailService available for sending. Worker at src/worker/agent-worker.ts runs background jobs. Pipeline at src/services/agent/pipeline.ts processes emails. Create src/services/agent/notifications.ts with: sendDailyDigest(firmId) for daily summary, sendUrgentNotification(firmId, action) for claims/cancellations/low-confidence. Hook into worker at appropriate points. Digest content: processed email count, pending actions summary, accuracy stats.",
+      "steps": [
+        "Read src/services/notification-service.ts for notification pattern",
+        "Read src/worker/agent-worker.ts for worker structure",
+        "Create src/services/agent/notifications.ts with digest + urgent functions",
+        "Hook sendDailyDigest into worker schedule",
+        "Write tests in src/__tests__/unit/agent-notifications.test.ts",
+        "Run `npx vitest run`"
+      ],
+      "criteria": [
+        "Notification module exports sendDailyDigest and sendUrgentNotification",
+        "Digest includes: processed email count, pending actions, accuracy stats",
+        "Urgent triggers on: claims, cancellations, confidence < 0.5",
+        "Worker calls notification functions",
+        "`npx vitest run` shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "E2E",
+      "title": "Write end-to-end tests for agent pipeline",
+      "description": "Using superpower skills. Write 5 E2E test scenarios exercising the agent pipeline from email ingestion to action creation.",
+      "context": "Test files in src/__tests__/unit/. Use vitest with mocked prisma and external services. Pipeline: ingest → classify → extract → match → generate action. Reference existing test mocks in other test files.",
+      "steps": [
+        "Read src/services/agent/pipeline.ts for pipeline steps",
+        "Read existing test files for mock patterns",
+        "Create src/__tests__/unit/agent-e2e.test.ts with 5 scenarios",
+        "Run `npx vitest run`"
+      ],
+      "criteria": [
+        "File src/__tests__/unit/agent-e2e.test.ts exists",
+        "5 scenarios: renewal → update, new policy → create, non-insurance → skip, duplicate → dedupe, confirm → audit",
+        "All 5 tests pass: `npx vitest run src/__tests__/unit/agent-e2e.test.ts`",
+        "`npx vitest run` overall shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "PII-TEST",
+      "title": "Write PII integration test",
+      "description": "Using superpower skills. Write integration tests verifying PII desensitization end-to-end: real PII not in LLM requests, correctly restored in output.",
+      "context": "PII module at src/lib/agent/pii.ts (173 lines). Functions: desensitizePII(text) → { sanitized, mapping }, resensitize(text, mapping) → original. PII types: email, phone (Irish 085/+353), policy number, PPS, DOB.",
+      "steps": [
+        "Read src/lib/agent/pii.ts for desensitizePII/resensitize API",
+        "Read existing PII unit tests for test patterns",
+        "Create src/__tests__/unit/agent-pii-integration.test.ts",
+        "Run `npx vitest run`"
+      ],
+      "criteria": [
+        "File src/__tests__/unit/agent-pii-integration.test.ts exists",
+        "Test: desensitize → resensitize round-trip restores all PII",
+        "Test: desensitized text contains zero original PII values",
+        "Covers ≥3 PII types (email, phone, policy number)",
+        "Edge cases: nested PII, no PII, unicode",
+        "`npx vitest run` shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": "LOAD",
+      "title": "Write load test for email processing",
+      "description": "Using superpower skills. Write a load test simulating 100 emails through the agent pipeline. Measure throughput, latency, error rate.",
+      "context": "Pipeline at src/services/agent/pipeline.ts. Mock prisma and LLM calls. Generate 100 realistic insurance emails (renewal, new policy, claim, cancellation, etc). Process in batches. Assert: error rate < 5%, test < 60s.",
+      "steps": [
+        "Read src/services/agent/pipeline.ts for processEmail signature",
+        "Create src/__tests__/unit/agent-load.test.ts",
+        "Generate 100 mock emails with varied insurance content",
+        "Process all through pipeline, measure performance",
+        "Run `npx vitest run`"
+      ],
+      "criteria": [
+        "File src/__tests__/unit/agent-load.test.ts exists",
+        "100 mock emails processed",
+        "Reports: total duration, emails/sec, error count",
+        "Error rate < 5%, test completes < 60s",
+        "`npx vitest run` shows 0 new failures"
+      ],
+      "status": "pending",
+      "attempts": 0
+    }
+  ]
+}

@@ -3,8 +3,14 @@ import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
 import { executeAction } from '@/lib/agent/action-executor';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const POST = withAuth('agent:bulk_confirm', async (user, request) => {
+  const rl = await checkRateLimit(`api:actions:bulk-confirm:${user.id}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   let actionIds: string[] = [];
   try {
     const body = await request.json();

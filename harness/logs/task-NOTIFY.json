@@ -1,0 +1,25 @@
+{
+  "task_id": "NOTIFY",
+  "title": "Implement agent notification system",
+  "started": "2026-03-31T17:00:00+01:00",
+  "completed": "2026-03-31T17:05:40+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T17:00:00+01:00",
+      "completed": "2026-03-31T17:05:40+01:00",
+      "duration_seconds": 340,
+      "eval_commands": [
+        "cat src/services/agent/notifications.ts | head -20",
+        "grep sendDailyDigest src/worker/agent-worker.ts",
+        "npx vitest run"
+      ],
+      "eval_outputs": ["sendDailyDigest + sendUrgentNotification exported", "Worker calls sendDailyDigest", "425 tests passed"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 340
+}

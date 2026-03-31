@@ -4,8 +4,14 @@ import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
 import { executeAction } from '@/lib/agent/action-executor';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const PUT = withAuth('agent:modify_action', async (user, request) => {
+  const rl = await checkRateLimit(`api:actions:modify:${user.id}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];

@@ -1,0 +1,24 @@
+{
+  "task_id": "E2E",
+  "title": "Write end-to-end tests for agent pipeline",
+  "started": "2026-03-31T17:06:00+01:00",
+  "completed": "2026-03-31T17:09:05+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T17:06:00+01:00",
+      "completed": "2026-03-31T17:09:05+01:00",
+      "duration_seconds": 185,
+      "eval_commands": [
+        "ls src/__tests__/unit/agent-e2e.test.ts",
+        "npx vitest run"
+      ],
+      "eval_outputs": ["File exists", "44 files, 430 tests passed"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 185
+}

@@ -1,0 +1,23 @@
+{
+  "task_id": "",
+  "title": "",
+  "started": "",
+  "completed": "",
+  "final_status": "",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "",
+      "completed": "",
+      "duration_seconds": 0,
+      "generator_prompt_summary": "",
+      "generator_result_summary": "",
+      "eval_commands": [],
+      "eval_outputs": [],
+      "eval_result": "",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 0,
+  "total_duration_seconds": 0
+}

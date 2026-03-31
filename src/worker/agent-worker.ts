@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { processEmail } from '../services/agent/pipeline';
+import { sendDailyDigest } from '../services/agent/notifications';
 import { pollConnectedMailboxes } from '../lib/email/oauth/poller';
 
 /**
@@ -120,6 +121,13 @@ export async function aggregateDailyMetrics(): Promise<void> {
         timeSavedMinutes: emailsProcessed * 3,
       },
     });
+
+    // Send daily digest after metrics aggregation
+    try {
+      await sendDailyDigest(firm.id);
+    } catch (err) {
+      console.error(`Failed to send daily digest for firm ${firm.id}:`, err);
+    }
   }
 }
 

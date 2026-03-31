@@ -1,0 +1,25 @@
+{
+  "experiment": "harness-v1",
+  "started": "2026-03-31T16:46:00+01:00",
+  "completed": "2026-03-31T17:15:55+01:00",
+  "config": {
+    "max_retries": 3,
+    "repo": "."
+  },
+  "summary": {
+    "total": 7,
+    "done": 7,
+    "escalated": 0,
+    "skipped": 0,
+    "total_attempts": 7
+  },
+  "tasks": {
+    "RLS": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T16:49:00+01:00" },
+    "RATE-LIMIT": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T16:55:30+01:00" },
+    "DETAIL-PAGE": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T16:59:30+01:00" },
+    "NOTIFY": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T17:05:40+01:00" },
+    "E2E": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T17:09:05+01:00" },
+    "PII-TEST": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T17:13:25+01:00" },
+    "LOAD": { "status": "done", "attempts": 1, "last_eval": "2026-03-31T17:15:55+01:00" }
+  }
+}

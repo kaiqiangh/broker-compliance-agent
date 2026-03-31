@@ -1,4 +1,5 @@
 import { withAuth } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 interface StoredEvent {
   id: number;
@@ -47,6 +48,14 @@ export function publishAgentEvent(firmId: string, event: { type: string; data: a
 }
 
 export const GET = withAuth(null, async (user, request) => {
+  const rl = await checkRateLimit(`api:events:${user.id}`, 30, 60_000);
+  if (!rl.allowed) {
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
   const encoder = new TextEncoder();
   const firmId = user.firmId;
 
