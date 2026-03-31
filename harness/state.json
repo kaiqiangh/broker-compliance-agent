@@ -1,0 +1,25 @@
+{
+  "experiment": "harness-v1",
+  "started": null,
+  "completed": null,
+  "config": {
+    "max_retries": 3,
+    "repo": "/Users/kai/Desktop/broker-compliance-agent"
+  },
+  "summary": {
+    "total": 7,
+    "done": 0,
+    "escalated": 0,
+    "skipped": 0,
+    "total_attempts": 0
+  },
+  "tasks": {
+    "RLS": { "status": "pending", "attempts": 0, "last_eval": null },
+    "RATE-LIMIT": { "status": "pending", "attempts": 0, "last_eval": null },
+    "DETAIL-PAGE": { "status": "pending", "attempts": 0, "last_eval": null },
+    "NOTIFY": { "status": "pending", "attempts": 0, "last_eval": null },
+    "E2E": { "status": "pending", "attempts": 0, "last_eval": null },
+    "PII-TEST": { "status": "pending", "attempts": 0, "last_eval": null },
+    "LOAD": { "status": "pending", "attempts": 0, "last_eval": null }
+  }
+}
