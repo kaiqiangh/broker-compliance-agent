@@ -6,6 +6,7 @@ import { matchRecords } from '@/lib/agent/matcher';
 import { generateAction } from '@/lib/agent/action-generator';
 import { auditLog } from '@/lib/audit';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
+import { sendUrgentNotification } from '@/services/agent/notifications';
 
 export interface ProcessingResult {
   emailId: string;
@@ -285,6 +286,11 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
           emailSubject: email.subject,
         },
       });
+
+      // Urgent notification (fire-and-forget, don't block pipeline)
+      sendUrgentNotification(firmId, action.id).catch((err) =>
+        console.error(`[Pipeline] Urgent notification failed for action ${action.id}:`, err)
+      );
 
       // Mark email as processed
       const processingTimeMs = Date.now() - startTime;

@@ -3,8 +3,14 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const GET = withAuth('agent:view_own', async (user, request) => {
+  const rl = await checkRateLimit(`api:actions:list:${user.id}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   const url = new URL(request.url);
   const status = url.searchParams.get('status');
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);

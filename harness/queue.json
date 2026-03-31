@@ -1,5 +1,5 @@
 {
-  "repo": "/Users/kai/Desktop/broker-compliance-agent",
+  "repo": ".",
   "created": "2026-03-31T16:30:00+01:00",
   "config": {
     "max_retries": 3,
@@ -9,7 +9,7 @@
     {
       "id": "RLS",
       "title": "Add RLS policies to agent tables",
-      "description": "Add PostgreSQL Row-Level Security policies to the 6 agent tables via SQL migration. Each firm must only see its own data at the database level.",
+      "description": "Using superpower skills. Add PostgreSQL Row-Level Security policies to the 6 agent tables via SQL migration. Each firm must only see its own data at the database level.",
       "context": "Prisma does NOT support @@policy directives — use a raw SQL migration file in prisma/migrations/. Follow the existing pattern from 001_rls/migration.sql which uses `get_current_firm_id()` session variable. The 6 tables (EmailIngressConfig, IncomingEmail, EmailAttachment, AgentAction, AgentActionModification, AgentMetricsDaily) all have firmId field mapped to firm_id column in DB. Application-level filtering already exists in all API routes.",
       "steps": [
         "Read prisma/migrations/001_rls/migration.sql to understand the existing RLS pattern",
@@ -31,7 +31,7 @@
     {
       "id": "RATE-LIMIT",
       "title": "Add rate limiting to agent API endpoints",
-      "description": "Apply the existing rate limiter to all agent API routes that don't already have it.",
+      "description": "Using superpower skills. Apply the existing rate limiter to all agent API routes that don't already have it.",
       "context": "Rate limiter at src/lib/rate-limit.ts exports `applyRateLimit(group, firmId, max, windowMs)` which returns `{ response, headers }`. Usage pattern: `const rl = await applyRateLimit('group', user.firmId, 60, 60_000); if (rl.response) return rl.response;`. Agent endpoints are under src/app/api/agent/ with subdirs: actions (8 routes), config (4 routes), emails (2 routes), events, health, ingest, learning, metrics, oauth (4 routes). Ingest already uses checkRateLimit — do NOT double-apply. Limits: ingest 100/min per firm, actions 60/min per user, config/test 5/min per user.",
       "steps": [
         "Read src/lib/rate-limit.ts to understand applyRateLimit API",
@@ -50,7 +50,7 @@
     {
       "id": "DETAIL-PAGE",
       "title": "Create agent action detail page",
-      "description": "Create a standalone page at /agent/actions/[id] showing full details of a single agent action.",
+      "description": "Using superpower skills. Create a standalone page at /agent/actions/[id] showing full details of a single agent action.",
       "context": "Dashboard (src/app/agent/page.tsx, 718 lines) has inline action cards as reference. API: GET /api/agent/actions/[id] returns action with email data. Layout at src/app/agent/layout.tsx. Page needs: email preview (HTML/text toggle), extracted data fields (old → new), action controls (confirm/modify/reject), audit trail timeline.",
       "steps": [
         "Read src/app/agent/page.tsx to understand existing action card UI and data fetching patterns",
@@ -71,7 +71,7 @@
     {
       "id": "NOTIFY",
       "title": "Implement agent notification system",
-      "description": "Build notification system: daily digest email + urgent notifications for high-priority items.",
+      "description": "Using superpower skills. Build notification system: daily digest email + urgent notifications for high-priority items.",
       "context": "Existing renewal notifications at src/services/notification-service.ts (reference pattern). EmailService available for sending. Worker at src/worker/agent-worker.ts runs background jobs. Pipeline at src/services/agent/pipeline.ts processes emails. Create src/services/agent/notifications.ts with: sendDailyDigest(firmId) for daily summary, sendUrgentNotification(firmId, action) for claims/cancellations/low-confidence. Hook into worker at appropriate points. Digest content: processed email count, pending actions summary, accuracy stats.",
       "steps": [
         "Read src/services/notification-service.ts for notification pattern",
@@ -94,7 +94,7 @@
     {
       "id": "E2E",
       "title": "Write end-to-end tests for agent pipeline",
-      "description": "Write 5 E2E test scenarios exercising the agent pipeline from email ingestion to action creation.",
+      "description": "Using superpower skills. Write 5 E2E test scenarios exercising the agent pipeline from email ingestion to action creation.",
       "context": "Test files in src/__tests__/unit/. Use vitest with mocked prisma and external services. Pipeline: ingest → classify → extract → match → generate action. Reference existing test mocks in other test files.",
       "steps": [
         "Read src/services/agent/pipeline.ts for pipeline steps",
@@ -114,7 +114,7 @@
     {
       "id": "PII-TEST",
       "title": "Write PII integration test",
-      "description": "Write integration tests verifying PII desensitization end-to-end: real PII not in LLM requests, correctly restored in output.",
+      "description": "Using superpower skills. Write integration tests verifying PII desensitization end-to-end: real PII not in LLM requests, correctly restored in output.",
       "context": "PII module at src/lib/agent/pii.ts (173 lines). Functions: desensitizePII(text) → { sanitized, mapping }, resensitize(text, mapping) → original. PII types: email, phone (Irish 085/+353), policy number, PPS, DOB.",
       "steps": [
         "Read src/lib/agent/pii.ts for desensitizePII/resensitize API",
@@ -136,7 +136,7 @@
     {
       "id": "LOAD",
       "title": "Write load test for email processing",
-      "description": "Write a load test simulating 100 emails through the agent pipeline. Measure throughput, latency, error rate.",
+      "description": "Using superpower skills. Write a load test simulating 100 emails through the agent pipeline. Measure throughput, latency, error rate.",
       "context": "Pipeline at src/services/agent/pipeline.ts. Mock prisma and LLM calls. Generate 100 realistic insurance emails (renewal, new policy, claim, cancellation, etc). Process in batches. Assert: error rate < 5%, test < 60s.",
       "steps": [
         "Read src/services/agent/pipeline.ts for processEmail signature",

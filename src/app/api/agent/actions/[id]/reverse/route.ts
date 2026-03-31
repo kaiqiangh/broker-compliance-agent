@@ -2,8 +2,14 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const PUT = withAuth('agent:reverse_action', async (user, request) => {
+  const rl = await checkRateLimit(`api:actions:reverse:${user.id}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];

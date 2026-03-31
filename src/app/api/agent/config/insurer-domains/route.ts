@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // Built-in insurer domains
 const PRESET_DOMAINS = [
@@ -13,6 +14,11 @@ const PRESET_DOMAINS = [
 ];
 
 export const GET = withAuth(null, async (user, _request) => {
+  const rl = await checkRateLimit(`api:config:insurer-domains:${user.id}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   const config = await prisma.emailIngressConfig.findUnique({
     where: { firmId: user.firmId },
     select: { insurerDomains: true },
@@ -27,6 +33,11 @@ export const GET = withAuth(null, async (user, _request) => {
 });
 
 export const PUT = withAuth(null, async (user, request) => {
+  const rl = await checkRateLimit(`api:config:insurer-domains:${user.id}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
+  }
+
   let domains: string[] = [];
   try {
     const body = await request.json();

@@ -16,7 +16,7 @@
 从 queue.json 的 task 提取 info，构建精简 prompt：
 
 ```text
-在 /Users/kai/Desktop/broker-compliance-agent 目录下工作。
+在当前 repo 根目录下工作。
 
 ## 任务: {title}
 {description}
@@ -51,7 +51,7 @@
 sessions_spawn:
   task: <上面构建的 prompt>
   mode: "run"
-  cwd: /Users/kai/Desktop/broker-compliance-agent
+  cwd: .
 ```
 
 等待 subagent 完成。记录输出。
@@ -148,6 +148,6 @@ sessions_spawn:
 - **不要问人类任何问题** — 全自动，直到最后报告
 - **不要修改 harness/queue.json** — 只改 state.json 和 logs/
 - **顺序执行** — 一次只跑一个 subagent，不并行
-- **repo 路径** — 所有 spawn 的 cwd 都是 `/Users/kai/Desktop/broker-compliance-agent`
+- **repo 路径** — 所有 spawn 的 cwd 都是 repo 根目录（`.`）
 - **不要 commit** — 实验期间不做 git 操作
 - **Prompt 精简** — subagent 超时多半是因为 prompt 太长，读完文件就没时间写了
