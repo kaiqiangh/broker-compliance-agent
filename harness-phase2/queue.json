@@ -10,7 +10,7 @@
     {
       "id": "P2-1",
       "title": "Auto-Execute UI + Undo flow",
-      "description": "Add executionMode toggle to config page + auto-execute notification + undo audit event.",
+      "description": "Using superpower skills. Add executionMode toggle to config page + auto-execute notification + undo audit event.",
       "context": "Config API already supports executionMode (Zod: suggestion|auto_execute). Config page at src/app/agent/config/page.tsx (360 lines) has no toggle. Reverse endpoint at PUT /api/agent/actions/[id]/reverse already has 24h window check. Pipeline at src/services/agent/pipeline.ts has auto-execute logic. Notifications at src/services/agent/notifications.ts.",
       "steps": [
         "Read src/app/agent/config/page.tsx for current UI structure",
@@ -33,7 +33,7 @@
     {
       "id": "P2-2",
       "title": "Learning feedback loop",
-      "description": "Inject learning insights into extractor prompt + low confidence fields marking + dashboard learning display.",
+      "description": "Using superpower skills. Inject learning insights into extractor prompt + low confidence fields marking + dashboard learning display.",
       "context": "Learning module at src/lib/agent/learning.ts exports getLearningInsights(firmId) returning [{field, commonMistake, suggestedFix, occurrences}]. Extractor at src/lib/agent/extractor.ts (107 lines) has no learning injection. Action generator at src/lib/agent/action-generator.ts. Metrics page at src/app/agent/metrics/page.tsx (301 lines). API GET /api/agent/learning returns insights + accuracy.",
       "steps": [
         "Read src/lib/agent/extractor.ts for extractData() function signature and prompt templates",
@@ -56,7 +56,7 @@
     {
       "id": "P2-3",
       "title": "Fuzzy matching enhancement",
-      "description": "Dynamic threshold based on classification confidence + multi-field (name+insurer) matching + match confidence to DB.",
+      "description": "Using superpower skills. Dynamic threshold based on classification confidence + multi-field (name+insurer) matching + match confidence to DB.",
       "context": "Matcher at src/lib/agent/matcher.ts has similarity() function with hardcoded threshold 0.7. AgentAction model has matchConfidence Decimal? field. Pipeline passes classification.confidence but matcher doesn't use it.",
       "steps": [
         "Read src/lib/agent/matcher.ts for current matchRecords() and similarity() logic",
@@ -78,7 +78,7 @@
     {
       "id": "P2-4",
       "title": "Notification preferences",
-      "description": "Add notification preference fields to schema + config API + config UI + respect preferences in notification functions.",
+      "description": "Using superpower skills. Add notification preference fields to schema + config API + config UI + respect preferences in notification functions.",
       "context": "EmailIngressConfig model in prisma/schema.prisma has no notification fields. Config API at src/app/api/agent/config/route.ts. Config page at src/app/agent/config/page.tsx. Notifications at src/services/agent/notifications.ts.",
       "steps": [
         "Read prisma/schema.prisma for EmailIngressConfig model",
@@ -103,7 +103,7 @@
     {
       "id": "P2-5",
       "title": "OCR activation",
-      "description": "Install tesseract.js + pdf2pic, add scanned PDF fallback to OCR.",
+      "description": "Using superpower skills. Install tesseract.js + pdf2pic, add scanned PDF fallback to OCR.",
       "context": "attachment-extractor.ts already has ocrImage() with dynamic import('tesseract.js'). PDF handling uses pdf-parse. Need to check package.json for existing deps.",
       "steps": [
         "Check package.json for tesseract.js and pdf2pic",
@@ -124,7 +124,7 @@
     {
       "id": "P2-6",
       "title": "Dashboard charts enhancement",
-      "description": "Complete metrics page with pie chart, line chart (7d/14d/30d), bar chart, number cards.",
+      "description": "Using superpower skills. Complete metrics page with pie chart, line chart (7d/14d/30d), bar chart, number cards.",
       "context": "Metrics page at src/app/agent/metrics/page.tsx (301 lines) already has SVG pie chart + line chart. API GET /api/agent/metrics returns aggregated data.",
       "steps": [
         "Read src/app/agent/metrics/page.tsx for existing chart components",
@@ -148,7 +148,7 @@
     {
       "id": "P2-7",
       "title": "CSV export",
-      "description": "Add CSV export endpoints for actions and emails + export buttons in dashboard.",
+      "description": "Using superpower skills. Add CSV export endpoints for actions and emails + export buttons in dashboard.",
       "context": "Existing CSV parser at src/lib/csv-parser.ts (for import). Actions API at src/app/api/agent/actions/. Emails API at src/app/api/agent/emails/.",
       "steps": [
         "Create GET /api/agent/actions/export?format=csv&from=&to= — returns CSV with Content-Disposition header",
@@ -170,7 +170,7 @@
     {
       "id": "P2-8",
       "title": "Email threading enhancement",
-      "description": "Inject thread context into extractor prompt + enhance action detail thread view.",
+      "description": "Using superpower skills. Inject thread context into extractor prompt + enhance action detail thread view.",
       "context": "Pipeline Step 8.5 already merges same-thread actions. Actions/[id] page returns threadEmails array. Dashboard has ThreadHistory component. Extractor currently sees only single email.",
       "steps": [
         "Read src/lib/agent/extractor.ts — add optional threadContext param to extractData()",
@@ -190,7 +190,7 @@
     {
       "id": "P2-10",
       "title": "IMAP direct connect",
-      "description": "New IMAP connector + poller + config API + UI + worker integration.",
+      "description": "Using superpower skills. New IMAP connector + poller + config API + UI + worker integration.",
       "context": "PRD §4.2 Mode B. ENG §2.2 IMAP Polling Worker. EmailIngressConfig model has provider, imapHost, imapPort, imapUsername, imapPasswordEncrypted fields. Existing OAuth routes at src/app/api/agent/oauth/. Crypto at src/lib/email/oauth/crypto.ts (AES-256-GCM). Worker at src/worker/agent-worker.ts.",
       "steps": [
         "npm install imapflow",
@@ -216,7 +216,7 @@
     {
       "id": "P2-11",
       "title": "Security audit",
-      "description": "OWASP checks + PII leakage verification + dependency scan.",
+      "description": "Using superpower skills. OWASP checks + PII leakage verification + dependency scan.",
       "context": "PRD §10 Non-Functional Requirements. ADR-013 PII Handling. All agent routes at src/app/api/agent/.",
       "steps": [
         "Grep $queryRaw/$executeRaw for SQL injection — verify parameterized",
@@ -241,7 +241,7 @@
     {
       "id": "P2-12",
       "title": "Performance optimization",
-      "description": "Pipeline parallelization + DB query optimization + worker batch tuning.",
+      "description": "Using superpower skills. Pipeline parallelization + DB query optimization + worker batch tuning.",
       "context": "Pipeline at src/services/agent/pipeline.ts runs serially. classify and desensitize have no dependency. processPendingEmails() hardcoded batch=10.",
       "steps": [
         "Parallelize classify + desensitize in pipeline.ts using Promise.all",
