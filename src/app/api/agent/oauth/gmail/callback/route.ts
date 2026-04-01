@@ -64,6 +64,12 @@ export async function GET(request: Request) {
 
   const tokens = await tokenRes.json();
 
+  if (!tokens.access_token || !tokens.refresh_token) {
+    return NextResponse.redirect(
+      `${process.env.APP_URL}/agent/config?error=missing_refresh_token`
+    );
+  }
+
   // Store encrypted tokens
   await prisma.emailIngressConfig.upsert({
     where: { firmId },

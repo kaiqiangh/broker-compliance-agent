@@ -20,7 +20,7 @@ const IMAP_PRESETS: Record<string, { host: string; port: number }> = {
   outlook: { host: 'outlook.office365.com', port: 993 },
 };
 
-export const POST = withAuth(null, async (user, request) => {
+export const POST = withAuth('agent:configure', async (user, request) => {
   const rl = await checkRateLimit(`api:oauth:imap:connect:${user.id}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
@@ -111,7 +111,7 @@ export const POST = withAuth(null, async (user, request) => {
       where: { id: savedConfig.id },
       data: {
         status: 'error',
-        lastError: err instanceof Error ? err.message : 'Unknown error',
+        lastError: 'Connection failed. Check credentials and network.',
         errorCount: { increment: 1 },
       },
     });

@@ -7,7 +7,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 
 const OUTLOOK_SCOPES = ['Mail.Read', 'offline_access'];
 
-export const GET = withAuth(null, async (user, _request) => {
+export const GET = withAuth('agent:configure', async (user, _request) => {
   const rl = await checkRateLimit(`api:oauth:outlook:authorize:${user.id}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
 import { checkRateLimit } from '@/lib/rate-limit';
 
-export const DELETE = withAuth(null, async (user, request) => {
+export const DELETE = withAuth('agent:configure', async (user, request) => {
   const rl = await checkRateLimit(`api:oauth:disconnect:${user.id}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });

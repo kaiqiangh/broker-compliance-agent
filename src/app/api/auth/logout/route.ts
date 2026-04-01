@@ -1,14 +1,33 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { jwtVerify } from 'jose';
+import { revokeToken } from '@/lib/auth';
 
-/**
- * Logout — clear the session cookie.
- * JWT tokens are stateless so there's no server-side session to delete.
- * The token will expire naturally within 8 hours.
- * For immediate invalidation in production, implement a token blocklist.
- */
-export async function POST(_request: Request) {
+const JWT_SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || '');
+const JWT_ISSUER = 'broker-comply';
+const SESSION_TTL_SECONDS = 8 * 60 * 60;
+
+export async function POST(request: Request) {
+  // Revoke the JWT token (add to blocklist for remaining TTL)
+  const cookieHeader = request.headers.get('cookie') || '';
+  const sessionMatch = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/);
+  const token = sessionMatch?.[1];
+
+  if (token) {
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET, { issuer: JWT_ISSUER });
+      const jti = payload.jti ?? `${payload.sub}:${payload.iat}`;
+      // TTL: remaining time until natural expiry (max 8h)
+      const remainingSec = payload.exp
+        ? Math.max(1, payload.exp - Math.floor(Date.now() / 1000))
+        : SESSION_TTL_SECONDS;
+      await revokeToken(jti, remainingSec);
+    } catch {
+      // Token already invalid — just clear cookie
+    }
+  }
+
   const response = NextResponse.json({ success: true });
   response.cookies.set('session', '', {
     httpOnly: true,
