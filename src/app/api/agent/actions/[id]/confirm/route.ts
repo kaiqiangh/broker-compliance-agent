@@ -32,7 +32,7 @@ export const PUT = withAuth('agent:confirm_action', async (user, request) => {
 
   if (result.count === 0) {
     // Either not found or already confirmed/modified/rejected
-    const action = await prisma.agentAction.findUnique({
+    const action = await prisma.agentAction.findFirst({
       where: { id: actionId, firmId: user.firmId },
     });
     if (!action) {
@@ -53,8 +53,9 @@ export const PUT = withAuth('agent:confirm_action', async (user, request) => {
   });
 
   // Execute the action — with rollback on failure
+  let executionResult;
   try {
-    await executeAction({
+    executionResult = await executeAction({
       ...action,
       changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
     });
@@ -82,13 +83,17 @@ export const PUT = withAuth('agent:confirm_action', async (user, request) => {
   // Mark as executed
   await prisma.agentAction.update({
     where: { id: actionId },
-    data: { executedAt: new Date() },
+    data: {
+      executedAt: new Date(),
+      entityType: executionResult.entityType ?? action.entityType,
+      entityId: executionResult.entityId ?? action.entityId,
+    },
   });
 
   await auditLog(user.firmId, 'agent.action_confirmed', 'agent_action', actionId, {
     actionType: action.actionType,
-    entityType: action.entityType,
-    entityId: action.entityId,
+    entityType: executionResult.entityType ?? action.entityType,
+    entityId: executionResult.entityId ?? action.entityId,
     confirmedBy: user.id,
   });
 

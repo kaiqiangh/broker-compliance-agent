@@ -14,7 +14,7 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
 
-  const action = await prisma.agentAction.findUnique({
+  const action = await prisma.agentAction.findFirst({
     where: { id: actionId, firmId: user.firmId },
   });
 
@@ -127,23 +127,27 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
     }
 
     case 'create_client': {
-      const clientName = changes.name?.new;
-      if (clientName) {
-        const client = await prisma.client.findFirst({
-          where: { firmId: user.firmId, name: clientName },
+      const client = action.entityId
+        ? await prisma.client.findFirst({
+            where: { id: action.entityId, firmId: user.firmId },
+          })
+        : changes.name?.new
+          ? await prisma.client.findFirst({
+              where: { firmId: user.firmId, name: changes.name.new },
+            })
+          : null;
+
+      if (client) {
+        const policyCount = await prisma.policy.count({
+          where: { clientId: client.id, firmId: user.firmId },
         });
-        if (client) {
-          const policyCount = await prisma.policy.count({
-            where: { clientId: client.id },
-          });
-          if (policyCount > 0) {
-            return NextResponse.json(
-              { error: { code: 'CONFLICT', message: 'Cannot reverse: client has associated policies' } },
-              { status: 409 }
-            );
-          }
-          await prisma.client.delete({ where: { id: client.id } });
+        if (policyCount > 0) {
+          return NextResponse.json(
+            { error: { code: 'CONFLICT', message: 'Cannot reverse: client has associated policies' } },
+            { status: 409 }
+          );
         }
+        await prisma.client.delete({ where: { id: client.id } });
       }
       break;
     }

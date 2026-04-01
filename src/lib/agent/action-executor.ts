@@ -1,16 +1,26 @@
 import { prisma } from '@/lib/prisma';
 
+type ActionChanges = Record<string, { old: any; new: any }>;
+
+export interface ExecutionResult {
+  entityType: string | null;
+  entityId: string | null;
+}
+
+interface ExecutableAction {
+  id: string;
+  actionType: string;
+  entityType?: string | null;
+  entityId: string | null;
+  firmId: string;
+  changes: ActionChanges | null;
+}
+
 /**
  * Execute an agent action — create/update/cancel the target entity.
  * Must handle ALL action types, not just update_policy.
  */
-export async function executeAction(action: {
-  id: string;
-  actionType: string;
-  entityId: string | null;
-  firmId: string;
-  changes: Record<string, { old: any; new: any }>;
-}): Promise<void> {
+export async function executeAction(action: ExecutableAction): Promise<ExecutionResult> {
   const changes = action.changes || {};
 
   switch (action.actionType) {
@@ -31,11 +41,14 @@ export async function executeAction(action: {
         // Update linked renewal
         await updateLinkedRenewal(action.entityId, changes);
       }
-      break;
+      return {
+        entityType: 'policy',
+        entityId: action.entityId,
+      };
     }
 
     case 'create_client': {
-      await prisma.client.create({
+      const client = await prisma.client.create({
         data: {
           firmId: action.firmId,
           name: changes.name?.new || 'Unknown',
@@ -43,7 +56,10 @@ export async function executeAction(action: {
           phone: changes.phone?.new || null,
         },
       });
-      break;
+      return {
+        entityType: 'client',
+        entityId: client.id,
+      };
     }
 
     case 'create_policy': {
@@ -54,7 +70,7 @@ export async function executeAction(action: {
       });
       if (!client) throw new Error(`Client ${action.entityId} not found in firm ${action.firmId}`);
 
-      await prisma.policy.create({
+      const policy = await prisma.policy.create({
         data: {
           firmId: action.firmId,
           clientId: action.entityId,
@@ -72,7 +88,10 @@ export async function executeAction(action: {
           policyStatus: 'active',
         },
       });
-      break;
+      return {
+        entityType: 'policy',
+        entityId: policy.id,
+      };
     }
 
     case 'cancel_policy': {
@@ -85,30 +104,48 @@ export async function executeAction(action: {
         where: { id: action.entityId },
         data: { policyStatus: 'cancelled' },
       });
-      break;
+      return {
+        entityType: 'policy',
+        entityId: action.entityId,
+      };
     }
 
     case 'update_claim': {
       // Claims table not yet implemented — log for now
       console.warn(`[executeAction] update_claim not yet implemented for action ${action.id}`);
-      break;
+      return {
+        entityType: action.entityType ?? 'claim',
+        entityId: action.entityId,
+      };
     }
 
     case 'flag_for_review':
     case 'no_action': {
       // No DB mutation needed
-      break;
+      return {
+        entityType: action.entityType ?? null,
+        entityId: action.entityId,
+      };
     }
 
     default:
       console.warn(`[executeAction] Unknown action type: ${action.actionType}`);
+      return {
+        entityType: action.entityType ?? null,
+        entityId: action.entityId,
+      };
   }
+
+  return {
+    entityType: action.entityType ?? null,
+    entityId: action.entityId,
+  };
 }
 
 /**
  * Extract policy update fields from changes object.
  */
-function extractPolicyChanges(changes: Record<string, { old: any; new: any }>): Record<string, any> {
+function extractPolicyChanges(changes: ActionChanges): Record<string, any> {
   const updateData: Record<string, any> = {};
 
   if (changes.premium) updateData.premium = changes.premium.new;
@@ -125,7 +162,7 @@ function extractPolicyChanges(changes: Record<string, { old: any; new: any }>): 
  */
 async function updateLinkedRenewal(
   policyId: string,
-  changes: Record<string, { old: any; new: any }>
+  changes: ActionChanges
 ): Promise<void> {
   if (!changes.expiry_date) return;
 

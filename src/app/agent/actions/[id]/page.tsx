@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { canReverseAction } from '@/app/agent/actions/action-detail-utils';
 
 // Types
 interface Modification {
@@ -32,6 +33,8 @@ interface ActionDetail {
   reasoning: string | null;
   status: string;
   createdAt: string;
+  confirmedAt?: string | null;
+  executedAt?: string | null;
   isReversed?: boolean;
   rejectedReason?: string | null;
   email: {
@@ -91,6 +94,7 @@ function actionColor(type: string): string {
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
   confirmed: 'bg-emerald-100 text-emerald-800',
+  executed: 'bg-blue-100 text-blue-800',
   rejected: 'bg-red-100 text-red-800',
   modified: 'bg-blue-100 text-blue-800',
   reversed: 'bg-gray-100 text-gray-600',
@@ -288,7 +292,12 @@ export default function AgentActionDetailPage() {
   }
 
   const isPending = action.status === 'pending';
-  const isConfirmed = action.status === 'confirmed';
+  const showReverseAction = canReverseAction(
+    action.status,
+    Boolean(action.isReversed),
+    action.executedAt,
+    action.confirmedAt
+  );
 
   return (
     <div>
@@ -389,11 +398,11 @@ export default function AgentActionDetailPage() {
             </div>
           )}
 
-          {/* Reverse action (for confirmed) */}
-          {isConfirmed && !action.isReversed && (
+          {/* Reverse action */}
+          {showReverseAction && (
             <div className="bg-white border border-gray-200 rounded-lg p-5">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Reverse Action</h2>
-              <p className="text-sm text-gray-500 mb-3">This will undo the confirmed changes.</p>
+              <p className="text-sm text-gray-500 mb-3">This will undo the executed changes if you are still within the 24-hour window.</p>
               <button
                 onClick={handleReverse}
                 disabled={actionLoading}

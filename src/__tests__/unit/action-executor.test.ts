@@ -13,6 +13,7 @@ const { mockPrisma } = vi.hoisted(() => {
       client: {
         findFirst: vi.fn(),
         create: vi.fn(),
+        delete: vi.fn(),
       },
       renewal: {
         findFirst: vi.fn(),
@@ -56,7 +57,7 @@ describe('executeAction firm isolation', () => {
     mockPrisma.policy.update.mockResolvedValue({});
     mockPrisma.renewal.findFirst.mockResolvedValue(null);
 
-    await executeAction({
+    const result = await executeAction({
       id: 'action-1',
       actionType: 'update_policy',
       entityId: 'policy-1',
@@ -65,6 +66,10 @@ describe('executeAction firm isolation', () => {
     });
 
     expect(mockPrisma.policy.update).toHaveBeenCalled();
+    expect(result).toEqual({
+      entityType: 'policy',
+      entityId: 'policy-1',
+    });
   });
 
   it('rejects create_policy with client from different firm', async () => {
@@ -96,5 +101,48 @@ describe('executeAction firm isolation', () => {
         changes: {},
       })
     ).rejects.toThrow(/not found in firm/i);
+  });
+
+  it('returns the created policy id for create_policy actions', async () => {
+    mockPrisma.client.findFirst.mockResolvedValue({ id: 'client-1', firmId: 'firm-a' });
+    mockPrisma.policy.create.mockResolvedValue({ id: 'policy-new', firmId: 'firm-a' });
+
+    const result = await executeAction({
+      id: 'action-4',
+      actionType: 'create_policy',
+      entityId: 'client-1',
+      firmId: 'firm-a',
+      changes: {
+        policy_number: { old: null, new: 'POL-123' },
+        insurer_name: { old: null, new: 'Aviva' },
+        policy_type: { old: null, new: 'motor' },
+        premium: { old: null, new: 500 },
+      },
+    });
+
+    expect(result).toEqual({
+      entityType: 'policy',
+      entityId: 'policy-new',
+    });
+  });
+
+  it('returns the created client id for create_client actions', async () => {
+    mockPrisma.client.create.mockResolvedValue({ id: 'client-new', firmId: 'firm-a' });
+
+    const result = await executeAction({
+      id: 'action-5',
+      actionType: 'create_client',
+      entityId: null,
+      firmId: 'firm-a',
+      changes: {
+        name: { old: null, new: 'John Murphy' },
+        email: { old: null, new: 'john@example.com' },
+      },
+    });
+
+    expect(result).toEqual({
+      entityType: 'client',
+      entityId: 'client-new',
+    });
   });
 });

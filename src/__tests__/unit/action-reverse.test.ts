@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     agentAction: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     policy: {
@@ -40,7 +41,7 @@ describe('Action reversal — all types', () => {
   const testUser = { id: 'user-1', firmId: 'firm-1', role: 'firm_admin' };
 
   it('reverses cancel_policy by restoring active status', async () => {
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
       id: 'action-1',
       firmId: 'firm-1',
       actionType: 'cancel_policy',
@@ -73,7 +74,7 @@ describe('Action reversal — all types', () => {
   });
 
   it('reverses create_policy by setting policyStatus to reversed', async () => {
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
       id: 'action-2',
       firmId: 'firm-1',
       actionType: 'create_policy',
@@ -105,11 +106,11 @@ describe('Action reversal — all types', () => {
   });
 
   it('prevents create_client reversal when client has policies', async () => {
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
       id: 'action-3',
       firmId: 'firm-1',
       actionType: 'create_client',
-      entityId: null,
+      entityId: 'client-1',
       status: 'executed',
       isReversed: false,
       executedAt: recentExecDate,
@@ -128,8 +129,37 @@ describe('Action reversal — all types', () => {
     expect(response.status).toBe(409); // Conflict
   });
 
+  it('reverses create_client by deleting the created client id directly', async () => {
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
+      id: 'action-3b',
+      firmId: 'firm-1',
+      actionType: 'create_client',
+      entityId: 'client-2',
+      status: 'executed',
+      isReversed: false,
+      executedAt: recentExecDate,
+      changes: { name: { old: null, new: 'Jane Murphy' } },
+    });
+    (prisma.client.findFirst as any).mockResolvedValue({ id: 'client-2', name: 'Jane Murphy' });
+    (prisma.policy.count as any).mockResolvedValue(0);
+    (prisma.client.delete as any).mockResolvedValue({});
+    (prisma.agentAction.update as any).mockResolvedValue({});
+
+    const { PUT } = await import('@/app/api/agent/actions/[id]/reverse/route');
+    const request = new Request('http://localhost/api/agent/actions/action-3b/reverse', {
+      method: 'PUT',
+      body: JSON.stringify({ reason: 'test' }),
+    });
+
+    const response = await PUT(testUser as any, request);
+    const body = await response.json();
+
+    expect(body.data.reversed).toBe(true);
+    expect(prisma.client.delete).toHaveBeenCalledWith({ where: { id: 'client-2' } });
+  });
+
   it('returns error for unknown action types', async () => {
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
       id: 'action-4',
       firmId: 'firm-1',
       actionType: 'unknown_type',

@@ -51,7 +51,7 @@ export const POST = withAuth('agent:bulk_confirm', async (user, request) => {
   for (const action of actions) {
     try {
       // Execute action (handles ALL action types)
-      await executeAction({
+      const executionResult = await executeAction({
         ...action,
         changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
       });
@@ -64,6 +64,8 @@ export const POST = withAuth('agent:bulk_confirm', async (user, request) => {
           confirmedBy: user.id,
           confirmedAt: new Date(),
           executedAt: new Date(),
+          entityType: executionResult.entityType ?? action.entityType,
+          entityId: executionResult.entityId ?? action.entityId,
         },
       });
 

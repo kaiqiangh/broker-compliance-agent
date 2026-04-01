@@ -16,7 +16,7 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
 
-  const action = await prisma.agentAction.findUnique({
+  const action = await prisma.agentAction.findFirst({
     where: { id: actionId, firmId: user.firmId },
   });
 
@@ -88,9 +88,10 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
   });
 
   // Execute the action with modified values
-  await executeAction({
+  const executionResult = await executeAction({
     id: actionId,
     actionType: action.actionType,
+    entityType: action.entityType,
     entityId: action.entityId,
     firmId: user.firmId,
     changes: modifiedChanges,
@@ -99,7 +100,11 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
   // Mark as executed
   await prisma.agentAction.update({
     where: { id: actionId },
-    data: { executedAt: new Date() },
+    data: {
+      executedAt: new Date(),
+      entityType: executionResult.entityType ?? action.entityType,
+      entityId: executionResult.entityId ?? action.entityId,
+    },
   });
 
   await auditLog(user.firmId, 'agent.action_modified', 'agent_action', actionId, {

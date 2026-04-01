@@ -14,7 +14,7 @@ export const GET = withAuth(null, async (user, request) => {
   const url = new URL(request.url);
   const actionId = url.pathname.split('/').filter(Boolean).pop();
 
-  const action = await prisma.agentAction.findUnique({
+  const action = await prisma.agentAction.findFirst({
     where: { id: actionId, firmId: user.firmId },
     include: {
       email: {

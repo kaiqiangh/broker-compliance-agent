@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
     agentAction: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -103,7 +104,7 @@ describe('PUT /api/agent/actions/:id/confirm', () => {
   it('returns 404 for non-existent action', async () => {
     // updateMany returns count: 0 (not found or already processed)
     (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 0 });
-    (prisma.agentAction.findUnique as any).mockResolvedValue(null);
+    (prisma.agentAction.findFirst as any).mockResolvedValue(null);
 
     const { PUT } = await import('@/app/api/agent/actions/[id]/confirm/route');
     const res = await PUT(
@@ -118,7 +119,7 @@ describe('PUT /api/agent/actions/:id/confirm', () => {
   it('returns 400 if action already confirmed', async () => {
     // updateMany returns 0 (status not pending)
     (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 0 });
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
       id: 'a1',
       status: 'confirmed',
     });
@@ -138,7 +139,7 @@ describe('PUT /api/agent/actions/:id/reject', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('rejects action with reason', async () => {
-    (prisma.agentAction.findUnique as any).mockResolvedValue({
+    (prisma.agentAction.findFirst as any).mockResolvedValue({
       id: 'a1',
       status: 'pending',
     });

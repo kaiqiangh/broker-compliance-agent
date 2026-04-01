@@ -14,7 +14,7 @@ export const PUT = withAuth('agent:reject_action', async (user, request) => {
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
 
-  const action = await prisma.agentAction.findUnique({
+  const action = await prisma.agentAction.findFirst({
     where: { id: actionId, firmId: user.firmId },
   });
 
