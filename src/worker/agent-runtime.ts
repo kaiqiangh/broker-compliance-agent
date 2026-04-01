@@ -67,7 +67,7 @@ export async function processPendingEmails(): Promise<number> {
 }
 
 export async function aggregateDailyMetrics(): Promise<void> {
-  const today = startOfDay(new Date());
+  const today = normalizeStartOfDay(new Date());
 
   const firms = await prisma.firm.findMany({
     where: {
@@ -141,6 +141,7 @@ export async function aggregateDailyMetrics(): Promise<void> {
             actionsRejected,
             actionsAutoExecuted,
             avgConfidence,
+            // Estimate: ~3 min saved per email (avg manual processing time)
             timeSavedMinutes: emailsProcessed * 3,
           },
           create: {
@@ -155,6 +156,7 @@ export async function aggregateDailyMetrics(): Promise<void> {
             actionsRejected,
             actionsAutoExecuted,
             avgConfidence,
+            // Estimate: ~3 min saved per email (avg manual processing time)
             timeSavedMinutes: emailsProcessed * 3,
           },
         });
@@ -217,7 +219,7 @@ export async function detectStaleEmails(): Promise<number> {
 export async function hasAggregatedMetricsForDate(date: Date): Promise<boolean> {
   const count = await prisma.agentMetricsDaily.count({
     where: {
-      date: startOfDay(date),
+      date: normalizeStartOfDay(date),
     },
   });
 
@@ -243,7 +245,7 @@ export async function runAgentMaintenanceTick(
   }
 
   let aggregatedMetrics = false;
-  const metricsDateKey = startOfDay(now).toISOString().slice(0, 10);
+  const metricsDateKey = normalizeStartOfDay(now).toISOString().slice(0, 10);
   if (state.lastMetricsDate !== metricsDateKey) {
     const alreadyAggregated = await deps.hasAggregatedMetricsForDate(now);
     if (!alreadyAggregated) {
@@ -261,7 +263,8 @@ export async function runAgentMaintenanceTick(
   };
 }
 
-function startOfDay(date: Date): Date {
+// Renamed to avoid confusion with date utility libraries
+function normalizeStartOfDay(date: Date): Date {
   const normalized = new Date(date);
   normalized.setHours(0, 0, 0, 0);
   return normalized;

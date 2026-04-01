@@ -55,7 +55,7 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
   let reason = '';
   try {
     const body = await request.json();
-    reason = body.reason || '';
+    reason = (body.reason || '').slice(0, 1000);
   } catch {}
 
   // Reverse the action

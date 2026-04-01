@@ -9,6 +9,13 @@ import { auditLog } from '@/lib/audit';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
 import { sendUrgentNotification, sendAutoExecuteNotification } from '@/services/agent/notifications';
 
+function buildAttachmentText(attachments: { extractedText: string | null; filename: string }[]): string {
+  return attachments
+    .filter(a => a.extractedText)
+    .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
+    .join('\n');
+}
+
 export interface ProcessingResult {
   emailId: string;
   classification: any;
@@ -134,10 +141,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         const stored = await attachmentPromise;
         if (stored && 'desensitizeResult' in stored) {
           // Classify step already desensitized bodyText — reuse tokens, only desensitize attachments
-          const attachmentText = stored.attachments
-            .filter(a => a.extractedText)
-            .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
-            .join('\n');
+          const attachmentText = buildAttachmentText(stored.attachments);
           const attResult = desensitizePII(attachmentText);
           tokens = [...stored.desensitizeResult.tokens, ...attResult.tokens];
           desensitized = stored.desensitizeResult.desensitized + attResult.desensitized;
@@ -148,10 +152,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
             where: { emailId },
             select: { extractedText: true, filename: true },
           });
-          const attachmentText = attachments
-            .filter(a => a.extractedText)
-            .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
-            .join('\n');
+          const attachmentText = buildAttachmentText(attachments);
           const result = desensitizePII(bodyText + attachmentText);
           tokens = result.tokens;
           desensitized = result.desensitized;
