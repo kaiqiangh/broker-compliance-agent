@@ -32,7 +32,7 @@ export const GET = withAuth(null, async (user, _request) => {
   });
 });
 
-export const PUT = withAuth(null, async (user, request) => {
+export const PUT = withAuth('agent:configure', async (user, request) => {
   const rl = await checkRateLimit(`api:config:insurer-domains:${user.id}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });

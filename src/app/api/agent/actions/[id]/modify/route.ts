@@ -16,6 +16,27 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
 
+  // Parse modifications from request body
+  let body: { modifications?: Record<string, any>; reason?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } },
+      { status: 400 }
+    );
+  }
+
+  const modifications = body.modifications || {};
+
+  if (Object.keys(modifications).length === 0) {
+    return NextResponse.json(
+      { error: { code: 'BAD_REQUEST', message: 'No modifications provided' } },
+      { status: 400 }
+    );
+  }
+
+  // Fetch action first (needed to compute modifiedChanges for the atomic update)
   const action = await prisma.agentAction.findFirst({
     where: { id: actionId, firmId: user.firmId },
   });
@@ -34,34 +55,42 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
     );
   }
 
-  // Parse modifications from request body
-  let body: { modifications?: Record<string, any>; reason?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } },
-      { status: 400 }
-    );
-  }
-
-  const modifications = body.modifications || {};
-
   // Apply modifications to the action's changes
   const currentChanges = (action.changes || {}) as Record<string, { old: any; new: any }>;
   const modifiedChanges = { ...currentChanges };
 
   for (const [field, newValue] of Object.entries(modifications)) {
     if (modifiedChanges[field]) {
-      // Update the 'new' value, keep 'old' as-is
       modifiedChanges[field] = { old: modifiedChanges[field].old, new: newValue };
     } else {
-      // New field added by user
       modifiedChanges[field] = { old: null, new: newValue };
     }
   }
 
-  // Record each modification for learning
+  // ATOMIC CLAIM: only update if still pending (prevents race with confirm/reject)
+  const claim = await prisma.agentAction.updateMany({
+    where: {
+      id: actionId,
+      firmId: user.firmId,
+      status: 'pending',
+    },
+    data: {
+      changes: modifiedChanges,
+      status: 'modified',
+      confirmedBy: user.id,
+      confirmedAt: new Date(),
+      modifiedFields: modifications,
+    },
+  });
+
+  if (claim.count === 0) {
+    return NextResponse.json(
+      { error: { code: 'CONFLICT', message: 'Action was already confirmed, rejected, or modified by another user' } },
+      { status: 409 }
+    );
+  }
+
+  // Record each modification for learning (non-blocking)
   for (const [field, newValue] of Object.entries(modifications)) {
     await prisma.agentActionModification.create({
       data: {
@@ -74,18 +103,6 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
       },
     });
   }
-
-  // Update action with modifications
-  await prisma.agentAction.update({
-    where: { id: actionId },
-    data: {
-      changes: modifiedChanges,
-      status: 'modified',
-      confirmedBy: user.id,
-      confirmedAt: new Date(),
-      modifiedFields: modifications,
-    },
-  });
 
   // Execute the action with modified values
   let executionResult;
@@ -138,7 +155,6 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
     modifiedBy: user.id,
   });
 
-  // SSE: notify frontend
   publishAgentEvent(user.firmId, {
     type: 'action_modified',
     data: { id: actionId, actionType: action.actionType },

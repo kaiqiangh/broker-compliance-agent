@@ -6,7 +6,10 @@ vi.mock('@/lib/prisma', () => ({
     agentAction: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
     },
     policy: {
       findFirst: vi.fn(),
@@ -53,7 +56,7 @@ describe('Action reversal — all types', () => {
     });
     (prisma.policy.findFirst as any).mockResolvedValue({ id: 'policy-1', firmId: 'firm-1' });
     (prisma.policy.update as any).mockResolvedValue({});
-    (prisma.agentAction.update as any).mockResolvedValue({});
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
 
     const { PUT } = await import('@/app/api/agent/actions/[id]/reverse/route');
     const request = new Request('http://localhost/api/agent/actions/action-1/reverse', {
@@ -86,7 +89,7 @@ describe('Action reversal — all types', () => {
     });
     (prisma.policy.findFirst as any).mockResolvedValue({ id: 'policy-new', firmId: 'firm-1' });
     (prisma.policy.update as any).mockResolvedValue({});
-    (prisma.agentAction.update as any).mockResolvedValue({});
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
 
     const { PUT } = await import('@/app/api/agent/actions/[id]/reverse/route');
     const request = new Request('http://localhost/api/agent/actions/action-2/reverse', {
@@ -143,7 +146,7 @@ describe('Action reversal — all types', () => {
     (prisma.client.findFirst as any).mockResolvedValue({ id: 'client-2', name: 'Jane Murphy' });
     (prisma.policy.count as any).mockResolvedValue(0);
     (prisma.client.delete as any).mockResolvedValue({});
-    (prisma.agentAction.update as any).mockResolvedValue({});
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
 
     const { PUT } = await import('@/app/api/agent/actions/[id]/reverse/route');
     const request = new Request('http://localhost/api/agent/actions/action-3b/reverse', {

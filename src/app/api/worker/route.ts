@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { prisma, runWithFirmContext } from '@/lib/prisma';
 import { NotificationService } from '@/services/notification-service';
 import { RenewalService } from '@/services/renewal-service';
@@ -35,23 +36,10 @@ function requireWorkerAuth(request: Request): Response | null {
   const token = authHeader.slice(7);
 
   // Timing-safe comparison to prevent timing attacks
-  const crypto = require('crypto') as typeof import('crypto');
   const expected = Buffer.from(workerSecret, 'utf-8');
   const received = Buffer.from(token, 'utf-8');
 
-  // If lengths differ, still do a constant-time check using a padded comparison
-  if (expected.length !== received.length) {
-    // Compare with a dummy buffer of equal length to maintain constant time
-    const maxLen = Math.max(expected.length, received.length);
-    const paddedExpected = Buffer.alloc(maxLen, 0);
-    const paddedReceived = Buffer.alloc(maxLen, 0);
-    expected.copy(paddedExpected);
-    received.copy(paddedReceived);
-    crypto.timingSafeEqual(paddedExpected, paddedReceived); // always false for wrong length
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (!crypto.timingSafeEqual(expected, received)) {
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

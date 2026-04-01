@@ -11,18 +11,10 @@ export const GET = withAuth('agent:view_own', async (user, _request) => {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
   }
 
-  const isRestricted = user.role === 'adviser' || user.role === 'read_only';
-
   const actions = await prisma.agentAction.findMany({
     where: {
       firmId: user.firmId,
       status: 'pending',
-      ...(isRestricted && {
-        OR: [
-          { confirmedBy: user.id },
-          { status: 'pending' },
-        ],
-      }),
     },
     orderBy: [
       { confidence: 'desc' }, // High confidence first

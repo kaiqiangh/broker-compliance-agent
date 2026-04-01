@@ -48,10 +48,10 @@ export const POST = withAuth('admin', async (user, request) => {
     });
   }
 
-  // Delete old events (batch to avoid lock contention)
+  // Delete old events (bounded loop to prevent runaway from concurrent inserts)
   let deleted = 0;
-  const batchSize = 1000;
-  while (true) {
+  const MAX_ITERATIONS = 100;
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
     const batch = await prisma.auditEvent.deleteMany({
       where: {
         firmId: user.firmId,
@@ -59,7 +59,7 @@ export const POST = withAuth('admin', async (user, request) => {
       },
     });
     deleted += batch.count;
-    if (batch.count < batchSize) break;
+    if (batch.count === 0) break;
   }
 
   // Also purge old notifications

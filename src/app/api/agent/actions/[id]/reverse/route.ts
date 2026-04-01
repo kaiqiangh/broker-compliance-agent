@@ -14,6 +14,13 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
 
+  // Parse reason first
+  let reason = '';
+  try {
+    const body = await request.json();
+    reason = (body.reason || '').slice(0, 1000);
+  } catch {}
+
   const action = await prisma.agentAction.findFirst({
     where: { id: actionId, firmId: user.firmId },
   });
@@ -25,21 +32,7 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
     );
   }
 
-  if (action.status !== 'executed' && action.status !== 'confirmed') {
-    return NextResponse.json(
-      { error: { code: 'BAD_REQUEST', message: 'Only executed actions can be reversed' } },
-      { status: 400 }
-    );
-  }
-
-  if (action.isReversed) {
-    return NextResponse.json(
-      { error: { code: 'BAD_REQUEST', message: 'Action already reversed' } },
-      { status: 400 }
-    );
-  }
-
-  // Check 24h window
+  // Check 24h window before atomic claim
   const executedAt = action.executedAt || action.confirmedAt;
   if (executedAt) {
     const hoursSince = (Date.now() - executedAt.getTime()) / (1000 * 60 * 60);
@@ -51,12 +44,45 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
     }
   }
 
-  // Get reason
-  let reason = '';
-  try {
-    const body = await request.json();
-    reason = (body.reason || '').slice(0, 1000);
-  } catch {}
+  // Atomic claim: mark as reversed BEFORE doing the reversal work
+  const claim = await prisma.agentAction.updateMany({
+    where: {
+      id: actionId,
+      firmId: user.firmId,
+      isReversed: false,
+      status: { in: ['executed', 'confirmed'] },
+    },
+    data: {
+      isReversed: true,
+      reversedBy: user.id,
+      reversedAt: new Date(),
+      reversalReason: reason,
+    },
+  });
+
+  if (claim.count === 0) {
+    // Check if already reversed or wrong status
+    const current = await prisma.agentAction.findFirst({
+      where: { id: actionId, firmId: user.firmId },
+      select: { isReversed: true, status: true },
+    });
+    if (!current) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Action not found' } },
+        { status: 404 }
+      );
+    }
+    if (current.isReversed) {
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: 'Action already reversed' } },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(
+      { error: { code: 'BAD_REQUEST', message: 'Only executed actions can be reversed' } },
+      { status: 400 }
+    );
+  }
 
   // Reverse the action
   const changes = action.changes as Record<string, { old: any; new: any }>;
@@ -80,7 +106,7 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
         // Revert linked renewal
         if (changes.expiry_date) {
           const renewal = await prisma.renewal.findFirst({
-            where: { policyId: action.entityId, status: { not: 'compliant' } },
+            where: { policyId: action.entityId, firmId: user.firmId, status: { not: 'compliant' } },
           });
           if (renewal) {
             await prisma.renewal.update({
@@ -164,17 +190,6 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
         { status: 400 }
       );
   }
-
-  // Mark as reversed
-  await prisma.agentAction.update({
-    where: { id: actionId },
-    data: {
-      isReversed: true,
-      reversedBy: user.id,
-      reversedAt: new Date(),
-      reversalReason: reason,
-    },
-  });
 
   const auditAction = action.mode === 'auto' ? 'agent.action_auto_undone' : 'agent.action_reversed';
   await auditLog(user.firmId, auditAction, 'agent_action', actionId, {

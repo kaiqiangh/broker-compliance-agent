@@ -218,8 +218,9 @@ export async function POST(request: Request) {
     });
   }
 
-  // Process email attachments — extract text for agent analysis
-  const emailAttachments = (parsed as any).attachments || [];
+  // Process email attachments — extract text for agent analysis (cap at 20 to prevent abuse)
+  const MAX_ATTACHMENTS = 20;
+  const emailAttachments = ((parsed as any).attachments || []).slice(0, MAX_ATTACHMENTS);
   for (const att of emailAttachments) {
     try {
       const extractedText = await extractAttachmentText(

@@ -150,11 +150,11 @@ describe('PUT /api/agent/actions/:id/reject', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('rejects action with reason', async () => {
-    (prisma.agentAction.findFirst as any).mockResolvedValue({
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
+    (prisma.agentAction.findUniqueOrThrow as any).mockResolvedValue({
       id: 'a1',
-      status: 'pending',
+      actionType: 'update_policy',
     });
-    (prisma.agentAction.update as any).mockResolvedValue({});
 
     const { PUT } = await import('@/app/api/agent/actions/[id]/reject/route');
     const res = await PUT(
@@ -166,8 +166,9 @@ describe('PUT /api/agent/actions/:id/reject', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(prisma.agentAction.update).toHaveBeenCalledWith(
+    expect(prisma.agentAction.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: expect.objectContaining({ status: 'pending' }),
         data: expect.objectContaining({
           status: 'rejected',
           rejectedReason: 'Data was incorrect',
@@ -190,6 +191,7 @@ describe('PUT /api/agent/actions/:id/modify', () => {
       status: 'pending',
       changes: { premium: { old: 1000, new: 1200 } },
     });
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
     (prisma.agentActionModification.create as any).mockResolvedValue({});
     (prisma.agentAction.update as any).mockResolvedValue({});
     (executeAction as any).mockResolvedValue({ entityType: 'policy', entityId: 'p1' });
@@ -223,6 +225,7 @@ describe('PUT /api/agent/actions/:id/modify', () => {
       status: 'pending',
       changes: { premium: { old: 1000, new: 1200 } },
     });
+    (prisma.agentAction.updateMany as any).mockResolvedValue({ count: 1 });
     (prisma.agentActionModification.create as any).mockResolvedValue({});
     (prisma.agentAction.update as any).mockResolvedValue({});
     (executeAction as any).mockRejectedValue(new Error('DB write failed'));

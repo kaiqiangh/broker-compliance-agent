@@ -14,33 +14,43 @@ export const PUT = withAuth('agent:reject_action', async (user, request) => {
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
 
-  const action = await prisma.agentAction.findFirst({
-    where: { id: actionId, firmId: user.firmId },
-  });
-
-  if (!action) {
-    return NextResponse.json(
-      { error: { code: 'NOT_FOUND', message: 'Action not found' } },
-      { status: 404 }
-    );
-  }
-
-  if (action.status !== 'pending') {
-    return NextResponse.json(
-      { error: { code: 'BAD_REQUEST', message: `Action is already ${action.status}` } },
-      { status: 400 }
-    );
-  }
-
   let reason = '';
   try {
     const body = await request.json();
     reason = body.reason || '';
   } catch {}
 
-  await prisma.agentAction.update({
+  // Atomic: reject only if still pending (prevents race with confirm/modify)
+  const result = await prisma.agentAction.updateMany({
+    where: {
+      id: actionId,
+      firmId: user.firmId,
+      status: 'pending',
+    },
+    data: {
+      status: 'rejected',
+      rejectedReason: reason,
+    },
+  });
+
+  if (result.count === 0) {
+    const action = await prisma.agentAction.findFirst({
+      where: { id: actionId, firmId: user.firmId },
+    });
+    if (!action) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Action not found' } },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json(
+      { error: { code: 'BAD_REQUEST', message: `Action is already ${action.status}` } },
+      { status: 400 }
+    );
+  }
+
+  const action = await prisma.agentAction.findUniqueOrThrow({
     where: { id: actionId },
-    data: { status: 'rejected', rejectedReason: reason },
   });
 
   await auditLog(user.firmId, 'agent.action_rejected', 'agent_action', actionId, {

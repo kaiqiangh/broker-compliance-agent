@@ -5,7 +5,7 @@ import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
 
-export const GET = withAuth(null, async (user, _request) => {
+export const GET = withAuth('agent:configure', async (user, _request) => {
   const rl = await checkRateLimit(`api:config:forwarding:${user.id}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });
