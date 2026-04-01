@@ -121,8 +121,9 @@ async function ocrPdfPages(buffer: Buffer): Promise<string> {
     for (let i = 1; i <= pageCount; i++) {
       try {
         const page = await convert(i);
-        if (page.base64) {
-          const imgBuffer = Buffer.from(page.base64, 'base64');
+        const pageBase64 = (page as { base64?: string }).base64;
+        if (pageBase64) {
+          const imgBuffer = Buffer.from(pageBase64, 'base64');
           const pageText = await ocrImage(imgBuffer);
           if (pageText.trim()) texts.push(pageText.trim());
         }

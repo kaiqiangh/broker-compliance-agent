@@ -9,6 +9,7 @@ import { storeRawEmail } from '@/lib/email/storage';
 import { enqueueJob } from '@/lib/agent/queue';
 import { auditLog } from '@/lib/audit';
 import { extractAttachmentText } from '@/lib/email/attachment-extractor';
+import { resolveThreadId } from '@/lib/email/threading';
 
 interface IngestBody {
   from: string;
@@ -168,7 +169,11 @@ export async function POST(request: Request) {
   }
 
   // Determine thread ID
-  const threadId = inReplyTo || references[0] || messageId;
+  const threadId = resolveThreadId({
+    messageId,
+    inReplyTo,
+    references,
+  });
 
   // Store email in DB (unique constraint on firmId+messageId handles dedup atomically)
   let email;

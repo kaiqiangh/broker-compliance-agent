@@ -3,6 +3,7 @@ import { decryptToken } from '@/lib/email/oauth/crypto';
 import { connectIMAP } from './connector';
 import { simpleParser } from 'mailparser';
 import { enqueueJob } from '@/lib/agent/queue';
+import { resolveThreadId } from '@/lib/email/threading';
 
 // Prevent concurrent polling of the same firm's mailbox
 const pollingLock = new Set<string>();
@@ -54,15 +55,33 @@ export async function pollIMAPConnections(): Promise<number> {
             uid: true,
           })) {
             try {
-              const parsed = await simpleParser(message.source);
+              if (!message.source) {
+                continue;
+              }
+
+              const parsed = await simpleParser(message.source as any);
               const messageId = (parsed.messageId || String(message.uid)).replace(/^<|>$/g, '');
+              const inReplyTo = parsed.inReplyTo ? parsed.inReplyTo.replace(/^<|>$/g, '') : null;
+              const references = Array.isArray(parsed.references)
+                ? parsed.references.map((reference) => reference.replace(/^<|>$/g, ''))
+                : parsed.references
+                  ? [parsed.references.replace(/^<|>$/g, '')]
+                  : [];
+              const threadId = resolveThreadId({
+                messageId,
+                inReplyTo,
+                references,
+              });
 
               const email = await prisma.incomingEmail.create({
                 data: {
                   firmId: config.firmId,
                   messageId,
+                  inReplyTo,
+                  threadId,
                   fromAddress: (parsed.from as any)?.value?.[0]?.address || '',
                   toAddresses: ((parsed.to as any)?.value || []).map((v: any) => v.address || ''),
+                  ccAddresses: ((parsed.cc as any)?.value || []).map((v: any) => v.address || ''),
                   subject: parsed.subject || '',
                   receivedAt: parsed.date || new Date(),
                   bodyText: parsed.text || '',
