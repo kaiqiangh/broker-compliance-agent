@@ -52,3 +52,76 @@ describe('Attachment text extraction', () => {
     expect(text).toBe('');
   });
 });
+
+// --- Scanned PDF OCR fallback tests ---
+describe('Scanned PDF OCR fallback', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('falls back to OCR when pdf-parse returns < 50 chars', async () => {
+    const pdfParseMock = vi.fn().mockResolvedValue({ text: '  \n ', numpages: 1 });
+    vi.doMock('pdf-parse', () => ({ default: pdfParseMock }));
+
+    const recognizeMock = vi.fn().mockResolvedValue({
+      data: { text: 'Extracted via OCR from scanned page' },
+    });
+    vi.doMock('tesseract.js', () => ({ recognize: recognizeMock }));
+
+    const convertMock = vi.fn().mockResolvedValue({
+      base64: Buffer.from('fake-image').toString('base64'),
+    });
+    vi.doMock('pdf2pic', () => ({
+      fromBuffer: vi.fn().mockReturnValue(convertMock),
+    }));
+
+    const { extractAttachmentText: extract } = await import('@/lib/email/attachment-extractor');
+
+    const text = await extract('scanned.pdf', 'application/pdf', Buffer.from('fake-pdf-data-for-testing-purposes'));
+    expect(text).toContain('Extracted via OCR from scanned page');
+    expect(recognizeMock).toHaveBeenCalled();
+    expect(convertMock).toHaveBeenCalled();
+  });
+
+  it('does NOT fall back to OCR when pdf-parse returns >= 50 chars', async () => {
+    const longText = 'A'.repeat(60);
+    const pdfParseMock = vi.fn().mockResolvedValue({ text: longText, numpages: 1 });
+    vi.doMock('pdf-parse', () => ({ default: pdfParseMock }));
+
+    const recognizeMock = vi.fn().mockResolvedValue({ data: { text: 'should not appear' } });
+    vi.doMock('tesseract.js', () => ({ recognize: recognizeMock }));
+
+    vi.doMock('pdf2pic', () => ({
+      fromBuffer: vi.fn().mockReturnValue(vi.fn()),
+    }));
+
+    const { extractAttachmentText: extract } = await import('@/lib/email/attachment-extractor');
+
+    const text = await extract('text-heavy.pdf', 'application/pdf', Buffer.from('fake-pdf-data-for-testing-purposes'));
+    expect(text).toBe(longText);
+    expect(recognizeMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to OCR when pdf-parse throws', async () => {
+    const pdfParseMock = vi.fn().mockRejectedValue(new Error('parse error'));
+    vi.doMock('pdf-parse', () => ({ default: pdfParseMock }));
+
+    const recognizeMock = vi.fn().mockResolvedValue({
+      data: { text: 'OCR recovered text after parse error' },
+    });
+    vi.doMock('tesseract.js', () => ({ recognize: recognizeMock }));
+
+    const convertMock = vi.fn().mockResolvedValue({
+      base64: Buffer.from('fake-image').toString('base64'),
+    });
+    vi.doMock('pdf2pic', () => ({
+      fromBuffer: vi.fn().mockReturnValue(convertMock),
+    }));
+
+    const { extractAttachmentText: extract } = await import('@/lib/email/attachment-extractor');
+
+    const text = await extract('corrupt.pdf', 'application/pdf', Buffer.from('fake-pdf-data-for-testing-purposes'));
+    expect(text).toContain('OCR recovered text after parse error');
+    expect(recognizeMock).toHaveBeenCalled();
+  });
+});

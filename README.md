@@ -11,8 +11,8 @@ docker compose up -d
 # 2. Install dependencies
 npm install
 
-# 3. Push database schema
-npx prisma db push
+# 3. Run database migrations
+npx prisma migrate dev
 
 # 4. Seed with sample data
 npm run db:seed
@@ -28,16 +28,16 @@ Open [http://localhost:3000](http://localhost:3000). Login with seeded credentia
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14 (App Router) + TailwindCSS |
-| Backend | Next.js API Routes + Prisma ORM |
-| Database | PostgreSQL 16 (local Docker / Railway EU) |
-| Auth | Custom JWT (jose) + bcrypt password hashing |
-| File storage | Local filesystem (`/api/files/`) |
-| Email | Resend (transactional email API) |
-| Document gen | Puppeteer (HTML to PDF, async background) |
-| Testing | Vitest (198 tests, 13 test files) |
+| Layer        | Technology                                  |
+| ------------ | ------------------------------------------- |
+| Frontend     | Next.js 14 (App Router) + TailwindCSS       |
+| Backend      | Next.js API Routes + Prisma ORM             |
+| Database     | PostgreSQL 16 (local Docker / Railway EU)   |
+| Auth         | Custom JWT (jose) + bcrypt password hashing |
+| File storage | Local filesystem (`/api/files/`)            |
+| Email        | Resend (transactional email API)            |
+| Document gen | Puppeteer (HTML to PDF, async background)   |
+| Testing      | Vitest (488 tests, 50 test files)           |
 
 ## Project Structure
 
@@ -139,6 +139,7 @@ src/
 ## Features
 
 ### Data Import
+
 - **CSV upload** with drag-and-drop
 - **Auto-detect** Applied Epic TAM, Acturis, or generic CSV formats
 - **Interactive mapping UI** for unknown formats (drag columns to fields)
@@ -149,6 +150,7 @@ src/
 - Saved mapping configs per firm
 
 ### Renewal Dashboard
+
 - **Status distribution** donut chart (pure CSS conic-gradient)
 - **40-day countdown bar** per renewal (CP158 compliance)
 - **Activity feed** (last 10 audit events with relative timestamps)
@@ -157,6 +159,7 @@ src/
 - **Sort** by expiry date, premium, status priority
 
 ### Compliance Checklist Engine
+
 - **8 CPC items** per renewal (renewal notification, suitability, market comparison, premium disclosure, commission disclosure, client communication, policy terms, final sign-off)
 - **State machine**: pending → in_progress → completed → pending_review → approved/rejected
 - **Sign-off workflow**: adviser completes, compliance officer reviews
@@ -165,6 +168,7 @@ src/
 - **Optimistic locking** on concurrent edits
 
 ### Document Generator
+
 - **CPC Renewal Notification Letter** (HTML → PDF via Puppeteer)
 - **Suitability Assessment Form** (needs/demands/circumstances review)
 - **Commission Disclosure** document
@@ -173,6 +177,7 @@ src/
 - **Async generation** via background worker
 
 ### Authentication & Authorization
+
 - **JWT sessions** (httpOnly cookie, 8-hour expiry)
 - **Token revocation** blocklist (invalidated on password change)
 - **4 roles**: firm_admin, compliance_officer, adviser, read_only
@@ -184,6 +189,7 @@ src/
 - **Rate limiting**: registration (3/min/IP), login (5/min/IP + per-account)
 
 ### Audit Trail
+
 - **12+ event types** (policy.imported, checklist.item.completed/approved/rejected, document.generated, user.login, gdpr.erasure_completed, etc.)
 - **Append-only** (PostgreSQL RLS blocks UPDATE/DELETE)
 - **Paginated** query with date/action/entity filters
@@ -191,6 +197,7 @@ src/
 - **6-year retention** (CPC requirement)
 
 ### GDPR Compliance
+
 - **Two-layer anonymization**: Layer 1 (compliance records retained 6yr) + Layer 2 (client PII erasable)
 - **Art 17(3)(b)** exemption logged in audit trail
 - **Data export** (JSON, Art 20 portability)
@@ -198,6 +205,7 @@ src/
 - **Retention purge** (automated 6-year cleanup)
 
 ### Background Worker
+
 - **DB-backed job queue** (no Redis dependency)
 - **Job types**: check_reminders, generate_document, gdpr_erasure
 - **Retry**: 3 attempts with exponential backoff (5min base)
@@ -206,39 +214,39 @@ src/
 
 ## API Endpoints
 
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | /api/auth/login | Email + password login | No |
-| POST | /api/auth/register | Firm + admin registration | No |
-| POST | /api/auth/logout | Destroy session | Yes |
-| POST | /api/auth/invite | Invite user to firm | Admin |
-| POST | /api/auth/change-password | Change password | Yes |
-| POST | /api/auth/forgot-password | Send reset email | No |
-| POST | /api/auth/reset-password | Reset with token | No |
-| GET | /api/auth/me | Current user + firm info | Yes |
-| GET | /api/users | List firm users | Admin |
-| GET | /api/clients | List clients | Yes (adviser-filtered) |
-| GET | /api/clients/:id | Client detail + policies | Yes |
-| POST | /api/clients | Create client | Adviser+ |
-| GET | /api/policies | List policies | Yes (adviser-filtered) |
-| GET | /api/policies/:id | Policy detail | Yes |
-| GET | /api/renewals | Renewal timeline | Yes (adviser-filtered) |
-| GET | /api/renewals/:id/checklist | Checklist for renewal | Yes |
-| PUT | /api/checklist/:id/complete | Mark item complete | Adviser+ |
-| PUT | /api/checklist/:id/approve | Approve item | CO+ |
-| PUT | /api/checklist/:id/reject | Reject with reason | CO+ |
-| POST | /api/import | Upload + parse CSV | Admin/CO |
-| POST | /api/import/confirm | Execute import | Admin/CO |
-| GET/POST | /api/import/mapping | Field mapping config | Admin/CO |
-| POST | /api/documents | Generate doc / inspection pack | Adviser+ |
-| POST | /api/upload | Upload evidence file | Yes |
-| GET | /api/files/:path | Serve uploaded files | Yes |
-| GET | /api/audit | Query audit events | CO+ |
-| GET | /api/dashboard | Dashboard stats | Yes |
-| POST | /api/gdpr | Data export + erasure | Admin |
-| POST | /api/gdpr/purge | Retention cleanup | Admin |
-| GET/POST | /api/worker | Worker job trigger | Worker auth |
-| GET | /api/health | Health check | No |
+| Method   | Path                        | Description                    | Auth                   |
+| -------- | --------------------------- | ------------------------------ | ---------------------- |
+| POST     | /api/auth/login             | Email + password login         | No                     |
+| POST     | /api/auth/register          | Firm + admin registration      | No                     |
+| POST     | /api/auth/logout            | Destroy session                | Yes                    |
+| POST     | /api/auth/invite            | Invite user to firm            | Admin                  |
+| POST     | /api/auth/change-password   | Change password                | Yes                    |
+| POST     | /api/auth/forgot-password   | Send reset email               | No                     |
+| POST     | /api/auth/reset-password    | Reset with token               | No                     |
+| GET      | /api/auth/me                | Current user + firm info       | Yes                    |
+| GET      | /api/users                  | List firm users                | Admin                  |
+| GET      | /api/clients                | List clients                   | Yes (adviser-filtered) |
+| GET      | /api/clients/:id            | Client detail + policies       | Yes                    |
+| POST     | /api/clients                | Create client                  | Adviser+               |
+| GET      | /api/policies               | List policies                  | Yes (adviser-filtered) |
+| GET      | /api/policies/:id           | Policy detail                  | Yes                    |
+| GET      | /api/renewals               | Renewal timeline               | Yes (adviser-filtered) |
+| GET      | /api/renewals/:id/checklist | Checklist for renewal          | Yes                    |
+| PUT      | /api/checklist/:id/complete | Mark item complete             | Adviser+               |
+| PUT      | /api/checklist/:id/approve  | Approve item                   | CO+                    |
+| PUT      | /api/checklist/:id/reject   | Reject with reason             | CO+                    |
+| POST     | /api/import                 | Upload + parse CSV             | Admin/CO               |
+| POST     | /api/import/confirm         | Execute import                 | Admin/CO               |
+| GET/POST | /api/import/mapping         | Field mapping config           | Admin/CO               |
+| POST     | /api/documents              | Generate doc / inspection pack | Adviser+               |
+| POST     | /api/upload                 | Upload evidence file           | Yes                    |
+| GET      | /api/files/:path            | Serve uploaded files           | Yes                    |
+| GET      | /api/audit                  | Query audit events             | CO+                    |
+| GET      | /api/dashboard              | Dashboard stats                | Yes                    |
+| POST     | /api/gdpr                   | Data export + erasure          | Admin                  |
+| POST     | /api/gdpr/purge             | Retention cleanup              | Admin                  |
+| GET/POST | /api/worker                 | Worker job trigger             | Worker auth            |
+| GET      | /api/health                 | Health check                   | No                     |
 
 ## Environment Variables
 
@@ -263,22 +271,49 @@ R2_BUCKET_NAME="..."
 R2_ENDPOINT="..."
 ```
 
+## Database Migrations
+
+Schema changes use Prisma migrations (not `db push`).
+
+```bash
+# Apply pending migrations (dev)
+npx prisma migrate dev
+
+# Apply pending migrations (production)
+npx prisma migrate deploy
+
+# Check migration status
+npx prisma migrate status
+
+# Create a new migration after editing schema.prisma
+npx prisma migrate dev --name describe_your_change
+
+# Regenerate Prisma Client (after schema changes)
+npx prisma generate
+
+# Reset database and reapply all migrations (⚠️ destructive)
+npx prisma migrate reset
+```
+
+**Baseline migration (000_init)** captures the full schema as of 2026-04-01.
+Incremental migrations (001+) layer on top. Do NOT modify old migration files.
+
 ## Security
 
-| Layer | Measure |
-|-------|---------|
-| Auth | JWT with token revocation blocklist (invalidated on password change) |
-| CSRF | Double-submit cookie pattern (csrf_token cookie + X-CSRF-Token header) |
-| Rate limit | Registration: 3/min/IP. Login: 5/min/IP + per-account 10/10min |
-| File upload | Magic bytes validation (PDF/PNG/JPEG/GIF + text), path traversal protection |
-| Multi-tenant | PostgreSQL RLS via AsyncLocalStorage (per-request firm context) |
-| Input | Zod validation on all API endpoints, max lengths on free-text fields |
-| XSS | `escapeHtml()` on all user content rendered in HTML/PDF documents |
-| CSV injection | Formula trigger chars (`=+-@|!\t\r`) prefixed with single quote |
-| Password | bcrypt hashing, min 10 / max 128 chars |
-| Cookies | httpOnly, sameSite: strict, secure (production) |
-| Logging | PII redacted in production error logs |
-| Worker | Timing-safe token comparison |
+| Layer         | Measure                                                                     |
+| ------------- | --------------------------------------------------------------------------- | ---------------------------------- |
+| Auth          | JWT with token revocation blocklist (invalidated on password change)        |
+| CSRF          | Double-submit cookie pattern (csrf_token cookie + X-CSRF-Token header)      |
+| Rate limit    | Registration: 3/min/IP. Login: 5/min/IP + per-account 10/10min              |
+| File upload   | Magic bytes validation (PDF/PNG/JPEG/GIF + text), path traversal protection |
+| Multi-tenant  | PostgreSQL RLS via AsyncLocalStorage (per-request firm context)             |
+| Input         | Zod validation on all API endpoints, max lengths on free-text fields        |
+| XSS           | `escapeHtml()` on all user content rendered in HTML/PDF documents           |
+| CSV injection | Formula trigger chars (`=+-@                                                | !\t\r`) prefixed with single quote |
+| Password      | bcrypt hashing, min 10 / max 128 chars                                      |
+| Cookies       | httpOnly, sameSite: strict, secure (production)                             |
+| Logging       | PII redacted in production error logs                                       |
+| Worker        | Timing-safe token comparison                                                |
 
 ## Testing
 
@@ -293,29 +328,29 @@ npm run test:watch
 npm run test:coverage
 ```
 
-| Test file | Tests | Coverage area |
-|-----------|-------|---------------|
-| auth.test.ts | 8 | JWT sign/verify/revoke, password hashing |
-| checklist-state.test.ts | 23 | State machine transitions, CPC definitions |
-| checklist-lifecycle.test.ts | 3 | Complete → approve → reject workflow |
-| csv-parser.test.ts | 27 | BMS format detection, date parsing, field mapping |
-| dates.test.ts | 19 | Irish date parsing, renewal timeline calculation |
-| dedup.test.ts | 26 | Hash normalization, Jaro-Winkler fuzzy match |
-| documents.test.ts | 8 | HTML template rendering, commission disclosure |
-| gdpr.test.ts | 8 | Data export, erasure, anonymization |
-| import-pipeline.test.ts | 9 | Full import pipeline integration |
-| integration.test.ts | 37 | End-to-end service integration |
-| rbac.test.ts | 13 | Role permissions, permission matrix |
-| regressions.test.ts | 12 | Regression prevention (edge cases) |
-| worker.test.ts | 5 | Job queue, retry logic, backoff |
+| Test file                   | Tests | Coverage area                                     |
+| --------------------------- | ----- | ------------------------------------------------- |
+| auth.test.ts                | 8     | JWT sign/verify/revoke, password hashing          |
+| checklist-state.test.ts     | 23    | State machine transitions, CPC definitions        |
+| checklist-lifecycle.test.ts | 3     | Complete → approve → reject workflow              |
+| csv-parser.test.ts          | 27    | BMS format detection, date parsing, field mapping |
+| dates.test.ts               | 19    | Irish date parsing, renewal timeline calculation  |
+| dedup.test.ts               | 26    | Hash normalization, Jaro-Winkler fuzzy match      |
+| documents.test.ts           | 8     | HTML template rendering, commission disclosure    |
+| gdpr.test.ts                | 8     | Data export, erasure, anonymization               |
+| import-pipeline.test.ts     | 9     | Full import pipeline integration                  |
+| integration.test.ts         | 37    | End-to-end service integration                    |
+| rbac.test.ts                | 13    | Role permissions, permission matrix               |
+| regressions.test.ts         | 12    | Regression prevention (edge cases)                |
+| worker.test.ts              | 5     | Job queue, retry logic, backoff                   |
 
 ## BMS Format Support
 
-| BMS | Auto-detection | Date format | Notes |
-|-----|---------------|-------------|-------|
-| Applied Epic (TAM) | 95% (PolicyRef + ClientName + InceptionDate) | DD/MM/YYYY | EUR with € symbol, fadas supported |
-| Acturis | 95% (PolicyNo + InsuredName + EffectiveDate) | YYYY-MM-DD | Split address columns, status field |
-| Generic CSV | 40-75% (fuzzy header matching, Jaro-Winkler) | DD/MM/YYYY default | Interactive mapping UI fallback |
+| BMS                | Auto-detection                               | Date format        | Notes                               |
+| ------------------ | -------------------------------------------- | ------------------ | ----------------------------------- |
+| Applied Epic (TAM) | 95% (PolicyRef + ClientName + InceptionDate) | DD/MM/YYYY         | EUR with € symbol, fadas supported  |
+| Acturis            | 95% (PolicyNo + InsuredName + EffectiveDate) | YYYY-MM-DD         | Split address columns, status field |
+| Generic CSV        | 40-75% (fuzzy header matching, Jaro-Winkler) | DD/MM/YYYY default | Interactive mapping UI fallback     |
 
 ## Compliance
 
@@ -329,29 +364,30 @@ npm run test:coverage
 
 **Phase 1 (CPC Renewal Compliance): Complete**
 
-| Area | Status |
-|------|--------|
-| Data Import | ✅ Complete (CSV/Applied Epic/Acturis + mapping + fuzzy dedup + CSV injection protection) |
-| Dashboard | ✅ Complete (pie chart, activity feed, countdown bar, quarterly score) |
-| Checklist Engine | ✅ Complete (8 items, sign-off, evidence, state machine, self-approval prevention) |
-| Document Generator | ✅ Complete (renewal letter, suitability, commission, async inspection pack) |
-| Audit Trail | ✅ Complete (15+ events, paginated, CSV export, PII redaction) |
-| Auth & RBAC | ✅ Complete (JWT, 4 roles, CSRF, Redis-backed rate limit, password reset, session revocation) |
-| GDPR | ✅ Complete (export, erasure via worker, retention purge, Art 17(3)(b)) |
-| Background Worker | ✅ Complete (DB job queue, retry, catch-up, inspection pack generation) |
-| Clients Management | ✅ Complete (list, detail, search, cascade delete) |
-| Settings | ✅ Complete (user profile, firm info, team members) |
-| CPC Rules DB | ✅ Complete (ADR-004: DB-configurable rules, admin API, auto-seed) |
-| Cloud Storage | ✅ Complete (S3/R2 support with local filesystem fallback) |
-| Unit Tests | ✅ 301 tests, 24 test files |
-| E2E Tests | ✅ 19 Playwright tests, 5 spec files |
-| Security | ✅ 0 npm vulnerabilities, all deps at latest |
-| DPIA Documentation | ❌ Pending (legal document, not code) |
-| Subscription Handling | ❌ Phase 2 |
+| Area                  | Status                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| Data Import           | ✅ Complete (CSV/Applied Epic/Acturis + mapping + fuzzy dedup + CSV injection protection)     |
+| Dashboard             | ✅ Complete (pie chart, activity feed, countdown bar, quarterly score)                        |
+| Checklist Engine      | ✅ Complete (8 items, sign-off, evidence, state machine, self-approval prevention)            |
+| Document Generator    | ✅ Complete (renewal letter, suitability, commission, async inspection pack)                  |
+| Audit Trail           | ✅ Complete (15+ events, paginated, CSV export, PII redaction)                                |
+| Auth & RBAC           | ✅ Complete (JWT, 4 roles, CSRF, Redis-backed rate limit, password reset, session revocation) |
+| GDPR                  | ✅ Complete (export, erasure via worker, retention purge, Art 17(3)(b))                       |
+| Background Worker     | ✅ Complete (DB job queue, retry, catch-up, inspection pack generation)                       |
+| Clients Management    | ✅ Complete (list, detail, search, cascade delete)                                            |
+| Settings              | ✅ Complete (user profile, firm info, team members)                                           |
+| CPC Rules DB          | ✅ Complete (ADR-004: DB-configurable rules, admin API, auto-seed)                            |
+| Cloud Storage         | ✅ Complete (S3/R2 support with local filesystem fallback)                                    |
+| Unit Tests            | ✅ 301 tests, 24 test files                                                                   |
+| E2E Tests             | ✅ 19 Playwright tests, 5 spec files                                                          |
+| Security              | ✅ 0 npm vulnerabilities, all deps at latest                                                  |
+| DPIA Documentation    | ❌ Pending (legal document, not code)                                                         |
+| Subscription Handling | ❌ Phase 2                                                                                    |
 
 ## Design Documents
 
 Full design documentation in `~/.gstack/projects/workspace/`:
+
 - `broker-compliance-prd-20260328.md` — Product Requirements
 - `broker-compliance-adr-20260328.md` — 12 Architecture Decision Records
 - `broker-compliance-eng-design-20260328.md` — Engineering Design

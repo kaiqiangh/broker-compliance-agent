@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 export interface MatchResult {
   client?: { id: string; confidence: number };
   policy?: { id: string; confidence: number };
+  matchMethod?: 'exact' | 'fuzzy_policy' | 'multi_field';
 }
 
 /**
@@ -40,11 +41,24 @@ function similarity(a: string, b: string): number {
   return 1 - levenshtein(a.toLowerCase(), b.toLowerCase()) / maxLen;
 }
 
+/**
+ * Dynamic similarity threshold based on classification confidence.
+ * Higher confidence in classification → stricter matching.
+ */
+function dynamicThreshold(classificationConfidence?: number): number {
+  if (classificationConfidence == null) return 0.7;
+  if (classificationConfidence >= 0.9) return 0.85;
+  if (classificationConfidence >= 0.7) return 0.75;
+  return 0.65;
+}
+
 export async function matchRecords(
   firmId: string,
-  extraction: Record<string, any>
+  extraction: Record<string, any>,
+  classificationConfidence?: number
 ): Promise<MatchResult> {
   const result: MatchResult = {};
+  const threshold = dynamicThreshold(classificationConfidence);
 
   // Step 1: Match policy by number
   if (extraction.policyNumber) {
@@ -62,6 +76,7 @@ export async function matchRecords(
     if (exactMatch) {
       result.policy = { id: exactMatch.id, confidence: 1.0 };
       result.client = { id: exactMatch.clientId, confidence: 1.0 };
+      result.matchMethod = 'exact';
       return result;
     }
 
@@ -77,7 +92,7 @@ export async function matchRecords(
 
     for (const candidate of candidates) {
       const score = similarity(normalized, candidate.policyNumberNormalized || '');
-      if (score > bestScore && score >= 0.7) {
+      if (score > bestScore && score >= threshold) {
         bestScore = score;
         bestPolicy = candidate;
       }
@@ -86,31 +101,65 @@ export async function matchRecords(
     if (bestPolicy) {
       result.policy = { id: bestPolicy.id, confidence: Math.round(bestScore * 100) / 100 };
       result.client = { id: bestPolicy.clientId, confidence: Math.round(bestScore * 100) / 100 };
+      result.matchMethod = 'fuzzy_policy';
       return result;
     }
   }
 
-  // Step 2: Match client by name (if no policy match)
+  // Step 2: Multi-field fallback (client name + insurer) when policy number fails
   if (extraction.clientName) {
-    const clients = await prisma.client.findMany({
-      where: { firmId },
-      take: 500,
-      orderBy: { name: 'asc' },
-    });
+    if (extraction.insurerName) {
+      // Multi-field: match by insurer (exact on Policy) + client name (fuzzy on Client)
+      const policies = await prisma.policy.findMany({
+        where: {
+          firmId,
+          policyStatus: 'active',
+          insurerName: { equals: extraction.insurerName, mode: 'insensitive' },
+        },
+        take: 500,
+        include: { client: { select: { id: true, name: true } } },
+      });
 
-    let bestClient: typeof clients[0] | null = null;
-    let bestScore = 0;
+      let bestClient: { id: string; name: string } | null = null;
+      let bestScore = 0;
 
-    for (const candidate of clients) {
-      const score = similarity(extraction.clientName, candidate.name);
-      if (score > bestScore && score >= 0.7) {
-        bestScore = score;
-        bestClient = candidate;
+      for (const policy of policies) {
+        const nameScore = similarity(extraction.clientName, policy.client.name);
+        const combinedScore = nameScore * 0.6 + 1.0 * 0.4; // insurer already exact-matched
+        if (combinedScore > bestScore && combinedScore >= 0.8) {
+          bestScore = combinedScore;
+          bestClient = policy.client;
+        }
+      }
+
+      if (bestClient) {
+        result.client = { id: bestClient.id, confidence: Math.round(bestScore * 100) / 100 };
+        result.matchMethod = 'multi_field';
       }
     }
 
-    if (bestClient) {
-      result.client = { id: bestClient.id, confidence: Math.round(bestScore * 100) / 100 };
+    // Name-only fallback (no insurer, or insurer match didn't yield results)
+    if (!result.client) {
+      const clients = await prisma.client.findMany({
+        where: { firmId },
+        take: 500,
+        orderBy: { name: 'asc' },
+      });
+
+      let bestClient: typeof clients[0] | null = null;
+      let bestScore = 0;
+
+      for (const candidate of clients) {
+        const nameScore = similarity(extraction.clientName, candidate.name);
+        if (nameScore > bestScore && nameScore >= threshold) {
+          bestScore = nameScore;
+          bestClient = candidate;
+        }
+      }
+
+      if (bestClient) {
+        result.client = { id: bestClient.id, confidence: Math.round(bestScore * 100) / 100 };
+      }
     }
   }
 

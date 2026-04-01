@@ -18,6 +18,7 @@ interface ThreadEmail {
   fromAddress: string;
   receivedAt: string;
   status: string;
+  bodyText?: string;
 }
 
 interface ActionDetail {
@@ -185,6 +186,7 @@ export default function AgentActionDetailPage() {
   const [modifications, setModifications] = useState<Record<string, any>>({});
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [expandedThreadEmails, setExpandedThreadEmails] = useState<Set<string>>(new Set());
 
   const fetchAction = useCallback(async () => {
     try {
@@ -502,22 +504,51 @@ export default function AgentActionDetailPage() {
           {/* Thread emails */}
           {action.threadEmails && action.threadEmails.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Thread</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Thread ({action.threadEmails.length})</h2>
               <div className="space-y-2">
-                {action.threadEmails.map(email => (
-                  <div
-                    key={email.id}
-                    className={`p-2 rounded text-sm ${email.id === action.email.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50'}`}
-                  >
-                    <p className="font-medium text-gray-900 truncate">{email.subject}</p>
-                    <p className="text-xs text-gray-400">
-                      {email.fromAddress} · {new Date(email.receivedAt).toLocaleString('en-IE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${email.status === 'processed' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-500'}`}>
-                      {email.status}
-                    </span>
-                  </div>
-                ))}
+                {action.threadEmails.map(email => {
+                  const isCurrent = email.id === action.email.id;
+                  const isExpanded = expandedThreadEmails.has(email.id);
+                  return (
+                    <div
+                      key={email.id}
+                      className={`rounded text-sm border ${isCurrent ? 'bg-blue-50 border-blue-200' : 'border-gray-100 hover:border-gray-200'}`}
+                    >
+                      <button
+                        className="w-full text-left p-2.5 flex items-start gap-2"
+                        onClick={() => {
+                          setExpandedThreadEmails(prev => {
+                            const next = new Set(prev);
+                            if (next.has(email.id)) next.delete(email.id);
+                            else next.add(email.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        <span className="text-gray-400 mt-0.5 shrink-0">{isExpanded ? '▾' : '▸'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {isCurrent && <span className="text-blue-600 mr-1">●</span>}
+                            {email.subject}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {email.fromAddress} · {new Date(email.receivedAt).toLocaleString('en-IE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${email.status === 'processed' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-500'}`}>
+                          {email.status}
+                        </span>
+                      </button>
+                      {isExpanded && email.bodyText && (
+                        <div className="px-3 pb-2.5 border-t border-gray-100 pt-2">
+                          <p className="text-xs text-gray-600 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                            {email.bodyText.slice(0, 2000)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

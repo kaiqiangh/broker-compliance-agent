@@ -172,10 +172,12 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
     },
   });
 
-  await auditLog(user.firmId, 'agent.action_reversed', 'agent_action', actionId, {
+  const auditAction = action.mode === 'auto' ? 'agent.action_auto_undone' : 'agent.action_reversed';
+  await auditLog(user.firmId, auditAction, 'agent_action', actionId, {
     actionType: action.actionType,
     reason,
     reversedBy: user.id,
+    wasAutoExecuted: action.mode === 'auto',
   });
 
   return NextResponse.json({ data: { id: actionId, reversed: true } });

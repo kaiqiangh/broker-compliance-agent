@@ -1,0 +1,23 @@
+{
+  "task_id": "P2-4",
+  "title": "Notification preferences",
+  "started": "2026-03-31T23:27:00+01:00",
+  "completed": "2026-03-31T23:33:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T23:27:00+01:00",
+      "completed": "2026-03-31T23:33:00+01:00",
+      "duration_seconds": 360,
+      "eval_commands": ["npx prisma validate", "npx vitest run"],
+      "eval_outputs": ["prisma validate passed", "456/456 tests passed, 0 failures"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 360,
+  "files_changed": ["prisma/schema.prisma", "src/app/api/agent/config/route.ts", "src/app/agent/config/page.tsx", "src/services/agent/notifications.ts", "src/__tests__/unit/agent-notifications.test.ts"],
+  "notes": "Actual migration needs PostgreSQL running. Schema validate + prisma generate passed."
+}

@@ -1,0 +1,22 @@
+{
+  "task_id": "P2-12",
+  "title": "Performance optimization",
+  "started": "2026-04-01T00:06:00+01:00",
+  "completed": "2026-04-01T00:11:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-04-01T00:06:00+01:00",
+      "completed": "2026-04-01T00:11:00+01:00",
+      "duration_seconds": 300,
+      "eval_commands": ["npx vitest run"],
+      "eval_outputs": ["488/488 tests passed, 0 failures"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 300,
+  "files_changed": ["src/services/agent/pipeline.ts", "src/app/api/agent/metrics/route.ts", "src/worker/agent-worker.ts", "src/lib/agent/queue-bullmq.ts"]
+}

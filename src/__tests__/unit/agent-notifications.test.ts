@@ -9,6 +9,7 @@ vi.mock('@/lib/prisma', () => ({
     agentAction: { count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     user: { findMany: vi.fn() },
     firm: { findUnique: vi.fn() },
+    emailIngressConfig: { findUnique: vi.fn() },
   },
 }));
 
@@ -31,6 +32,9 @@ describe('sendDailyDigest', () => {
   });
 
   function setupDefaults(overrides: Record<string, any> = {}) {
+    (prisma.emailIngressConfig.findUnique as any).mockResolvedValue(
+      overrides.emailIngressConfig ?? { digestEnabled: true, digestTime: '08:00' }
+    );
     (prisma.incomingEmail.count as any).mockResolvedValue(overrides.emailsProcessed ?? 5);
     (prisma.agentAction.count as any)
       .mockResolvedValueOnce(overrides.pendingActions ?? 3)
@@ -138,6 +142,9 @@ describe('sendUrgentNotification', () => {
   });
 
   function setupAction(overrides: Record<string, any> = {}) {
+    (prisma.emailIngressConfig.findUnique as any).mockResolvedValue(
+      overrides.emailIngressConfig ?? { urgentNotifications: true }
+    );
     (prisma.agentAction.findUnique as any).mockResolvedValue({
       id: 'action-1',
       actionType: overrides.actionType ?? 'update_claim',
@@ -213,6 +220,7 @@ describe('sendUrgentNotification', () => {
   });
 
   it('handles missing action gracefully', async () => {
+    (prisma.emailIngressConfig.findUnique as any).mockResolvedValue({ urgentNotifications: true });
     (prisma.agentAction.findUnique as any).mockResolvedValue(null);
 
     await expect(sendUrgentNotification('firm-1', 'missing')).resolves.not.toThrow();

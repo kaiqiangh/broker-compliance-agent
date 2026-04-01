@@ -1,0 +1,32 @@
+{
+  "task_id": "P2-1",
+  "title": "Auto-Execute UI + Undo",
+  "started": "2026-03-31T23:14:00+01:00",
+  "completed": "2026-03-31T23:20:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T23:14:00+01:00",
+      "completed": "2026-03-31T23:17:00+01:00",
+      "duration_seconds": 180,
+      "eval_commands": [],
+      "eval_outputs": ["Subagent ran in wrong directory"],
+      "eval_result": "FAIL",
+      "unmet_criteria": ["All — wrong cwd"]
+    },
+    {
+      "attempt": 2,
+      "started": "2026-03-31T23:17:00+01:00",
+      "completed": "2026-03-31T23:20:00+01:00",
+      "duration_seconds": 180,
+      "eval_commands": ["npx vitest run"],
+      "eval_outputs": ["456/456 tests passed, 0 failures"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 2,
+  "total_duration_seconds": 360,
+  "files_changed": ["src/app/agent/config/page.tsx", "src/services/agent/notifications.ts", "src/services/agent/pipeline.ts", "src/app/api/agent/actions/[id]/reverse/route.ts"]
+}

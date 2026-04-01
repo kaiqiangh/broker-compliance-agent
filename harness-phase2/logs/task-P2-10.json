@@ -1,0 +1,22 @@
+{
+  "task_id": "P2-10",
+  "title": "IMAP direct connect",
+  "started": "2026-03-31T23:50:00+01:00",
+  "completed": "2026-03-31T23:58:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T23:50:00+01:00",
+      "completed": "2026-03-31T23:58:00+01:00",
+      "duration_seconds": 480,
+      "eval_commands": ["npx vitest run"],
+      "eval_outputs": ["482/482 tests passed, 0 failures"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 480,
+  "files_changed": ["package.json", "src/lib/email/imap/connector.ts", "src/lib/email/imap/poller.ts", "src/app/api/agent/oauth/imap/connect/route.ts", "src/app/api/agent/oauth/imap/disconnect/route.ts", "src/app/agent/config/page.tsx", "src/worker/agent-worker.ts", "src/worker/index.ts", "src/__tests__/unit/imap-poller.test.ts", "src/__tests__/unit/imap-connect-api.test.ts"]
+}

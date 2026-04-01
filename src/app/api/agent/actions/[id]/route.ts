@@ -56,6 +56,7 @@ export const GET = withAuth(null, async (user, request) => {
         fromAddress: true,
         receivedAt: true,
         status: true,
+        bodyText: true,
       },
       orderBy: { receivedAt: 'asc' },
     });

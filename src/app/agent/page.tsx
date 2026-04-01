@@ -538,7 +538,7 @@ export default function AgentDashboardPage() {
       {/* Main content: Pending actions / History */}
       <div className="lg:col-span-2 space-y-4">
         {/* Main tab switcher */}
-        <div className="flex border-b mb-4">
+        <div className="flex border-b mb-4 items-center">
           <button
             onClick={() => setMainTab('pending')}
             className={`px-4 py-2 text-sm font-medium border-b-2 ${
@@ -559,6 +559,13 @@ export default function AgentDashboardPage() {
           >
             History
           </button>
+          <a
+            href="/api/agent/actions/export?format=csv"
+            download
+            className="ml-auto px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2 cursor-pointer"
+          >
+            Export CSV
+          </a>
         </div>
 
         {mainTab === 'history' ? (
@@ -704,7 +711,16 @@ export default function AgentDashboardPage() {
 
         {activeTab === 'activity' && (
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Recent Emails</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide flex-1">Recent Emails</h3>
+              <a
+                href="/api/agent/emails/export?format=csv"
+                download
+                className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2 cursor-pointer"
+              >
+                Export CSV
+              </a>
+            </div>
             {emails.length === 0 ? (
               <p className="text-xs text-gray-400">No emails processed yet</p>
             ) : (

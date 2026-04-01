@@ -1,0 +1,22 @@
+{
+  "task_id": "P2-8",
+  "title": "Email threading enhancement",
+  "started": "2026-03-31T23:47:00+01:00",
+  "completed": "2026-03-31T23:50:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T23:47:00+01:00",
+      "completed": "2026-03-31T23:50:00+01:00",
+      "duration_seconds": 180,
+      "eval_commands": ["npx vitest run"],
+      "eval_outputs": ["467/467 tests passed, 0 failures"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 180,
+  "files_changed": ["src/lib/agent/extractor.ts", "src/services/agent/pipeline.ts", "src/app/agent/actions/[id]/page.tsx", "src/app/api/agent/actions/[id]/route.ts"]
+}

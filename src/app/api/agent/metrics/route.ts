@@ -12,7 +12,15 @@ export const GET = withAuth(null, async (user, request) => {
   }
 
   const url = new URL(request.url);
-  const days = Math.min(parseInt(url.searchParams.get('days') || '30'), 90);
+
+  // Support both ?range=7d|14d|30d and legacy ?days=N
+  const rangeParam = url.searchParams.get('range');
+  let days: number;
+  if (rangeParam === '7d' || rangeParam === '14d' || rangeParam === '30d') {
+    days = parseInt(rangeParam);
+  } else {
+    days = Math.min(parseInt(url.searchParams.get('days') || '30'), 90);
+  }
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
@@ -26,24 +34,24 @@ export const GET = withAuth(null, async (user, request) => {
     orderBy: { date: 'asc' },
   });
 
-  // Get current aggregate stats
-  const [
-    totalEmails,
-    totalActions,
-    pendingActions,
-    confirmedActions,
-    modifiedActions,
-    rejectedActions,
-    autoExecutedActions,
-  ] = await Promise.all([
+  // Get current aggregate stats — 2 DB round-trips instead of 8
+  const [totalEmails, statusGroups, autoExecutedCount] = await Promise.all([
     prisma.incomingEmail.count({ where: { firmId: user.firmId } }),
-    prisma.agentAction.count({ where: { firmId: user.firmId } }),
-    prisma.agentAction.count({ where: { firmId: user.firmId, status: 'pending' } }),
-    prisma.agentAction.count({ where: { firmId: user.firmId, status: 'confirmed' } }),
-    prisma.agentAction.count({ where: { firmId: user.firmId, status: 'modified' } }),
-    prisma.agentAction.count({ where: { firmId: user.firmId, status: 'rejected' } }),
+    prisma.agentAction.groupBy({
+      by: ['status'],
+      where: { firmId: user.firmId },
+      _count: { _all: true },
+    }),
     prisma.agentAction.count({ where: { firmId: user.firmId, mode: 'auto', status: 'executed' } }),
   ]);
+
+  const statusMap = Object.fromEntries(statusGroups.map(g => [g.status, g._count._all]));
+  const totalActions = statusGroups.reduce((sum, g) => sum + g._count._all, 0);
+  const pendingActions = statusMap['pending'] || 0;
+  const confirmedActions = statusMap['confirmed'] || 0;
+  const modifiedActions = statusMap['modified'] || 0;
+  const rejectedActions = statusMap['rejected'] || 0;
+  const autoExecutedActions = autoExecutedCount;
 
   const totalDecided = confirmedActions + modifiedActions + rejectedActions;
   // "Useful rate" — agent was on the right track (confirmed or modified = useful)

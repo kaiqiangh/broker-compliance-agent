@@ -282,7 +282,8 @@ describe('E2E agent pipeline scenarios', () => {
 
     // No extraction, matching, or action creation
     expect(extractData).not.toHaveBeenCalled();
-    expect(desensitizePII).not.toHaveBeenCalled();
+    // desensitizePII IS called before classify (ADR-013: no raw PII to LLM)
+    expect(desensitizePII).toHaveBeenCalledTimes(1);
     expect(matchRecords).not.toHaveBeenCalled();
     expect(generateAction).not.toHaveBeenCalled();
     expect(prisma.agentAction.create).not.toHaveBeenCalled();

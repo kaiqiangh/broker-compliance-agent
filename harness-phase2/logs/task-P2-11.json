@@ -1,0 +1,23 @@
+{
+  "task_id": "P2-11",
+  "title": "Security audit",
+  "started": "2026-03-31T23:58:00+01:00",
+  "completed": "2026-04-01T00:06:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T23:58:00+01:00",
+      "completed": "2026-04-01T00:06:00+01:00",
+      "duration_seconds": 480,
+      "eval_commands": ["npx vitest run", "npm audit --audit-level=high"],
+      "eval_outputs": ["488/488 tests passed, 0 failures", "0 vulnerabilities"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 480,
+  "files_changed": ["src/__tests__/unit/agent-pii-leakage.test.ts"],
+  "finding": "classifyEmail() sends raw email body to LLM before desensitizePII — recommend moving desensitization before classification in pipeline.ts"
+}

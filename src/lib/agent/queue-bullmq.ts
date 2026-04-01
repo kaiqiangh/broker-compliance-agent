@@ -92,7 +92,7 @@ function startWorkers() {
     },
     {
       connection: conn,
-      concurrency: 10,
+      concurrency: parseInt(process.env.AGENT_BATCH_SIZE || '10', 10),
       limiter: { max: 100, duration: 60000 },
     }
   );

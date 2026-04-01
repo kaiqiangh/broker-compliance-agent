@@ -134,6 +134,15 @@ export function generateAction(input: GenerateInput): AgentActionData {
   };
 }
 
+/** Returns field names where extracted value is null/undefined/empty/"Unknown" */
+export function getLowConfidenceFields(extraction: Record<string, any>): string[] {
+  const LOW_CONFIDENCE_VALUES = new Set([null, undefined, '', 'Unknown', 'unknown', 'N/A', 'n/a']);
+  const skipFields = new Set(['changesNoted', 'statusUpdate', 'coverDetails', 'reason']); // optional fields
+  return Object.entries(extraction)
+    .filter(([key, val]) => !skipFields.has(key) && LOW_CONFIDENCE_VALUES.has(val))
+    .map(([key]) => key);
+}
+
 function buildReasoning(input: GenerateInput): string {
   const { extraction, matching, classification } = input;
   const parts: string[] = [];
@@ -152,5 +161,12 @@ function buildReasoning(input: GenerateInput): string {
     parts.push(`New expiry: ${extraction.newExpiry}`);
   }
 
-  return parts.join('. ') + '.';
+  let reasoning = parts.join('. ') + '.';
+
+  const lowConfidenceFields = getLowConfidenceFields(extraction);
+  if (lowConfidenceFields.length > 0) {
+    reasoning += ` [Low confidence fields: ${lowConfidenceFields.join(', ')}]`;
+  }
+
+  return reasoning;
 }

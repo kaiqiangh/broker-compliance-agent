@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import { processEmail } from '../services/agent/pipeline';
 import { sendDailyDigest } from '../services/agent/notifications';
 import { pollConnectedMailboxes } from '../lib/email/oauth/poller';
+import { pollIMAPConnections } from '../lib/email/imap/poller';
 
 /**
  * Agent Worker - Background job processor
@@ -13,10 +14,12 @@ import { pollConnectedMailboxes } from '../lib/email/oauth/poller';
  */
 
 export async function processPendingEmails(): Promise<number> {
+  const batchSize = parseInt(process.env.AGENT_BATCH_SIZE || '10', 10);
+
   const pendingEmails = await prisma.incomingEmail.findMany({
     where: { status: 'pending_processing' },
     orderBy: { createdAt: 'asc' },
-    take: 10, // Process max 10 at a time
+    take: batchSize,
     select: { id: true },
   });
 
@@ -45,7 +48,14 @@ export async function aggregateDailyMetrics(): Promise<void> {
     select: { id: true },
   });
 
-  for (const firm of firms) {
+  // Process firms with concurrency limit (max 5 parallel)
+  const MAX_CONCURRENCY = 5;
+  const results: PromiseSettledResult<void>[] = [];
+
+  for (let i = 0; i < firms.length; i += MAX_CONCURRENCY) {
+    const batch = firms.slice(i, i + MAX_CONCURRENCY);
+    const batchResults = await Promise.allSettled(
+      batch.map(async (firm) => {
     const [
       emailsReceived,
       emailsProcessed,
@@ -128,6 +138,16 @@ export async function aggregateDailyMetrics(): Promise<void> {
     } catch (err) {
       console.error(`Failed to send daily digest for firm ${firm.id}:`, err);
     }
+      }),
+    );
+    results.push(...batchResults);
+  }
+
+  // Log any failed firm aggregations
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('[aggregateDailyMetrics] Firm processing failed:', result.reason);
+    }
   }
 }
 
@@ -182,11 +202,13 @@ if (require.main === module) {
         break;
       case 'poll':
         const newEmails = await pollConnectedMailboxes();
-        console.log(`Polled mailboxes: ${newEmails} new emails`);
+        const imapNew = await pollIMAPConnections();
+        console.log(`Polled mailboxes: ${newEmails + imapNew} new emails`);
         break;
       case 'all':
         await detectStaleEmails();
         await pollConnectedMailboxes();
+        await pollIMAPConnections();
         const processed = await processPendingEmails();
         await aggregateDailyMetrics();
         console.log(`Done: ${processed} emails processed`);

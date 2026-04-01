@@ -189,6 +189,12 @@ async function executeJob(jobType: string, payload: any) {
       console.log(`[Worker] Inspection pack generated: ${fileName} (${pack.fileCount} files) → ${fileUrl}`);
       break;
     }
+    case 'poll_imap': {
+      const { pollIMAPConnections } = await import('../lib/email/imap/poller');
+      const count = await pollIMAPConnections();
+      console.log(`[Worker] IMAP poll: ${count} new emails`);
+      break;
+    }
     case 'gdpr_erasure': {
       const { firmId, clientId, clientName, clientEmail, reason, actorId } = payload;
       if (!firmId || !clientId) {

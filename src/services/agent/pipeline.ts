@@ -6,7 +6,7 @@ import { matchRecords } from '@/lib/agent/matcher';
 import { generateAction } from '@/lib/agent/action-generator';
 import { auditLog } from '@/lib/audit';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
-import { sendUrgentNotification } from '@/services/agent/notifications';
+import { sendUrgentNotification, sendAutoExecuteNotification } from '@/services/agent/notifications';
 
 export interface ProcessingResult {
   emailId: string;
@@ -46,6 +46,12 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
       let resensitized: any;
       let matching: any;
 
+      // Stored data from classify step (desensitize result + attachments), or null for resume
+      let attachmentPromise: Promise<
+        | { desensitizeResult: { desensitized: string; tokens: Record<string, string> }; attachments: Array<{ extractedText: string | null; filename: string }> }
+        | Array<{ extractedText: string | null; filename: string }>
+      > | null = null;
+
       // ── Step 1: Classify ──
       if (startStep === 'classify') {
         // Set status to processing
@@ -54,11 +60,25 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
           data: { status: 'processing', pipelineStep: 'classify', processingStartedAt: new Date() },
         });
 
-        classification = await classifyEmail({
+        // Parallel: desensitize bodyText + fetch attachments (both independent)
+        const [desensitizeResult, attachments] = await Promise.all([
+          Promise.resolve(desensitizePII(email.bodyText || '')),
+          prisma.emailAttachment.findMany({
+            where: { emailId },
+            select: { extractedText: true, filename: true },
+          }),
+        ]);
+
+        // Classify with desensitized body (ADR-013: no raw PII to LLM)
+        const classifyResult = await classifyEmail({
           subject: email.subject,
           from: email.fromAddress,
-          bodyText: email.bodyText || '',
+          bodyText: desensitizeResult.desensitized,
         });
+
+        classification = classifyResult;
+        // Store desensitize result + attachments for extract step (reuse tokens)
+        attachmentPromise = Promise.resolve({ desensitizeResult, attachments });
 
         // Update email with classification
         await prisma.incomingEmail.update({
@@ -105,36 +125,72 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
           data: { pipelineStep: 'desensitize' },
         });
 
-        // Desensitize PII (bodyText only — bodyHtml has HTML tags that pollute LLM input)
-        const bodyText = email.bodyText || '';
+        // Reuse desensitize result from classify step, or run fresh (resume path)
+        let tokens: Record<string, string>;
+        let desensitized: string;
 
-        // Include attachment text if available
-        const attachments = await prisma.emailAttachment.findMany({
-          where: { emailId },
-          select: { extractedText: true, filename: true },
-        });
-        const attachmentText = attachments
-          .filter(a => a.extractedText)
-          .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
-          .join('\n');
-
-        const fullContext = bodyText + attachmentText;
-        const desensitizeResult = desensitizePII(fullContext);
-
-        const tokens = desensitizeResult.tokens;
-        const desensitized = desensitizeResult.desensitized;
+        const stored = await attachmentPromise;
+        if (stored && 'desensitizeResult' in stored) {
+          // Classify step already desensitized bodyText — reuse tokens, only desensitize attachments
+          const attachmentText = stored.attachments
+            .filter(a => a.extractedText)
+            .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
+            .join('\n');
+          const attResult = desensitizePII(attachmentText);
+          tokens = [...stored.desensitizeResult.tokens, ...attResult.tokens];
+          desensitized = stored.desensitizeResult.desensitized + attResult.desensitized;
+        } else {
+          // Resume path: no stored result, desensitize everything fresh
+          const bodyText = email.bodyText || '';
+          const attachments = stored || await prisma.emailAttachment.findMany({
+            where: { emailId },
+            select: { extractedText: true, filename: true },
+          });
+          const attachmentText = attachments
+            .filter(a => a.extractedText)
+            .map(a => `\n--- ${a.filename} ---\n${a.extractedText}`)
+            .join('\n');
+          const result = desensitizePII(bodyText + attachmentText);
+          tokens = result.tokens;
+          desensitized = result.desensitized;
+        }
 
         await prisma.incomingEmail.update({
           where: { id: emailId },
           data: { pipelineStep: 'extract' },
         });
 
+        // Build thread context (last 3 emails in thread, each truncated to 200 chars, total capped at 1000)
+        let threadContext: string | undefined;
+        if (email.threadId) {
+          const threadEmails = await prisma.incomingEmail.findMany({
+            where: { threadId: email.threadId, id: { not: emailId } },
+            orderBy: { receivedAt: 'desc' },
+            take: 3,
+            select: { fromAddress: true, bodyText: true },
+          });
+          if (threadEmails.length > 0) {
+            let total = 0;
+            const parts: string[] = [];
+            for (const te of threadEmails) {
+              const snippet = (te.bodyText || '').slice(0, 200);
+              const part = `From: ${te.fromAddress}\n${snippet}`;
+              if (total + part.length > 1000) break;
+              parts.push(part);
+              total += part.length;
+            }
+            if (parts.length > 0) {
+              threadContext = parts.join('\n---\n');
+            }
+          }
+        }
+
         // Extract data
         extraction = await extractData(desensitized, classification.category, {
           subject: email.subject,
           from: email.fromAddress,
           bodyText: desensitized,
-        });
+        }, firmId, threadContext);
 
         // Resensitize
         resensitized = resensitize(extraction, tokens);
@@ -157,7 +213,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
 
       // ── Step 6: Match to existing records ──
       if (startStep === 'classify' || startStep === 'desensitize' || startStep === 'match') {
-        matching = await matchRecords(firmId, resensitized);
+        matching = await matchRecords(firmId, resensitized, classification.confidence);
 
         await prisma.incomingEmail.update({
           where: { id: emailId },
@@ -286,6 +342,13 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
           emailSubject: email.subject,
         },
       });
+
+      // Auto-execute notification (fire-and-forget)
+      if (autoExecuted) {
+        sendAutoExecuteNotification(firmId, action.id).catch((err) =>
+          console.error(`[Pipeline] Auto-execute notification failed for action ${action.id}:`, err)
+        );
+      }
 
       // Urgent notification (fire-and-forget, don't block pipeline)
       sendUrgentNotification(firmId, action.id).catch((err) =>

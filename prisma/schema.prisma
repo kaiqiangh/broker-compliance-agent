@@ -379,6 +379,9 @@ model EmailIngressConfig {
   notifyOnAction             String    @default("pending") @map("notify_on_action") @db.VarChar(20)
   notifyChannel              String    @default("dashboard") @map("notify_channel") @db.VarChar(20)
   notifyDigestMode           String    @default("realtime") @map("notify_digest_mode") @db.VarChar(20)
+  digestEnabled              Boolean   @default(true) @map("digest_enabled")
+  digestTime                 String    @default("08:00") @map("digest_time") @db.VarChar(5)
+  urgentNotifications        Boolean   @default(true) @map("urgent_notifications")
   status                     String    @default("active") @map("status") // active, paused, error, disconnected
   lastPolledAt               DateTime? @map("last_polled_at")
   lastError                  String?   @map("last_error") @db.Text

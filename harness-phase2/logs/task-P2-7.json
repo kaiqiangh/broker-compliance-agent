@@ -1,0 +1,22 @@
+{
+  "task_id": "P2-7",
+  "title": "CSV export",
+  "started": "2026-03-31T23:41:00+01:00",
+  "completed": "2026-03-31T23:47:00+01:00",
+  "final_status": "done",
+  "attempts": [
+    {
+      "attempt": 1,
+      "started": "2026-03-31T23:41:00+01:00",
+      "completed": "2026-03-31T23:47:00+01:00",
+      "duration_seconds": 360,
+      "eval_commands": ["npx vitest run"],
+      "eval_outputs": ["467/467 tests passed, 0 failures"],
+      "eval_result": "PASS",
+      "unmet_criteria": []
+    }
+  ],
+  "total_attempts": 1,
+  "total_duration_seconds": 360,
+  "files_changed": ["src/app/api/agent/actions/export/route.ts", "src/app/api/agent/emails/export/route.ts", "src/app/agent/page.tsx", "src/__tests__/unit/csv-export.test.ts"]
+}

@@ -20,13 +20,19 @@ export async function extractAttachmentText(
   }
 
   try {
-    // PDF extraction
+    // PDF extraction with OCR fallback for scanned PDFs
     if (contentType === 'application/pdf' || filename.endsWith('.pdf')) {
       try {
         const result = await pdfParse(buffer);
-        return result.text || '';
+        const text = result.text || '';
+        // If very little text extracted, likely a scanned PDF — fall back to OCR
+        if (text.trim().length < 50) {
+          return await ocrPdfPages(buffer);
+        }
+        return text;
       } catch {
-        return '';
+        // pdf-parse failed (possibly corrupt or scanned), try OCR fallback
+        return await ocrPdfPages(buffer);
       }
     }
 
@@ -83,6 +89,50 @@ async function ocrImage(buffer: Buffer): Promise<string> {
     return data.text || '';
   } catch (err) {
     console.error('[attachment-extractor] OCR failed:', err);
+    return '';
+  }
+}
+
+/**
+ * Convert PDF pages to images via pdf2pic, then OCR each page with tesseract.js.
+ */
+async function ocrPdfPages(buffer: Buffer): Promise<string> {
+  try {
+    const { fromBuffer } = await import('pdf2pic');
+    const convert = fromBuffer(buffer, {
+      density: 200,
+      saveFilename: 'page',
+      format: 'png',
+      width: 2000,
+      height: 2800,
+    });
+
+    // pdf-parse may return numPages; try to get page count, fallback to 5
+    let pageCount = 5;
+    try {
+      const pdfParse = (await import('pdf-parse')).default;
+      const meta = await pdfParse(buffer, { max: 0 });
+      if (meta.numpages) pageCount = meta.numpages;
+    } catch {
+      // keep default
+    }
+
+    const texts: string[] = [];
+    for (let i = 1; i <= pageCount; i++) {
+      try {
+        const page = await convert(i);
+        if (page.base64) {
+          const imgBuffer = Buffer.from(page.base64, 'base64');
+          const pageText = await ocrImage(imgBuffer);
+          if (pageText.trim()) texts.push(pageText.trim());
+        }
+      } catch {
+        // page conversion failed, skip
+      }
+    }
+    return texts.join('\n\n');
+  } catch (err) {
+    console.error('[attachment-extractor] PDF OCR fallback failed:', err);
     return '';
   }
 }

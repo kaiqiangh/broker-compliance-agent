@@ -14,6 +14,9 @@ const UpdateConfigSchema = z.object({
   notifyOnAction: z.enum(['all', 'pending', 'errors']).optional(),
   notifyChannel: z.enum(['email', 'dashboard', 'both']).optional(),
   notifyDigestMode: z.enum(['realtime', 'daily']).optional(),
+  digestEnabled: z.boolean().optional(),
+  digestTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  urgentNotifications: z.boolean().optional(),
 }).strict();
 
 export const GET = withAuth('agent:view_own', async (user, _request) => {
@@ -45,6 +48,9 @@ export const GET = withAuth('agent:view_own', async (user, _request) => {
       notifyOnAction: config.notifyOnAction,
       notifyChannel: config.notifyChannel,
       notifyDigestMode: config.notifyDigestMode,
+      digestEnabled: config.digestEnabled,
+      digestTime: config.digestTime,
+      urgentNotifications: config.urgentNotifications,
       // Connection health
       health: {
         status: config.status,
@@ -93,6 +99,9 @@ export const PUT = withAuth('agent:configure', async (user, request) => {
       ...(body.notifyOnAction !== undefined && { notifyOnAction: body.notifyOnAction }),
       ...(body.notifyChannel !== undefined && { notifyChannel: body.notifyChannel }),
       ...(body.notifyDigestMode !== undefined && { notifyDigestMode: body.notifyDigestMode }),
+      ...(body.digestEnabled !== undefined && { digestEnabled: body.digestEnabled }),
+      ...(body.digestTime !== undefined && { digestTime: body.digestTime }),
+      ...(body.urgentNotifications !== undefined && { urgentNotifications: body.urgentNotifications }),
     },
     create: {
       firmId: user.firmId,
