@@ -1,9 +1,10 @@
 import { prisma, runWithFirmContext } from '@/lib/prisma';
 import { classifyEmail } from '@/lib/agent/classifier';
 import { extractData } from '@/lib/agent/extractor';
-import { desensitizePII, resensitize } from '@/lib/agent/pii';
+import { desensitizePII, resensitize, type DesensitizeResult, type PIIToken } from '@/lib/agent/pii';
 import { matchRecords } from '@/lib/agent/matcher';
 import { generateAction } from '@/lib/agent/action-generator';
+import { executeAction } from '@/lib/agent/action-executor';
 import { auditLog } from '@/lib/audit';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
 import { sendUrgentNotification, sendAutoExecuteNotification } from '@/services/agent/notifications';
@@ -45,11 +46,12 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
       let extraction: any;
       let resensitized: any;
       let matching: any;
+      type AttachmentContext = { extractedText: string | null; filename: string };
 
       // Stored data from classify step (desensitize result + attachments), or null for resume
       let attachmentPromise: Promise<
-        | { desensitizeResult: { desensitized: string; tokens: Record<string, string> }; attachments: Array<{ extractedText: string | null; filename: string }> }
-        | Array<{ extractedText: string | null; filename: string }>
+        | { desensitizeResult: DesensitizeResult; attachments: AttachmentContext[] }
+        | AttachmentContext[]
       > | null = null;
 
       // ── Step 1: Classify ──
@@ -126,7 +128,7 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         });
 
         // Reuse desensitize result from classify step, or run fresh (resume path)
-        let tokens: Record<string, string>;
+        let tokens: PIIToken[];
         let desensitized: string;
 
         const stored = await attachmentPromise;
@@ -290,20 +292,15 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
         where: { firmId },
       });
 
-      let status = 'pending';
-      let mode = 'suggestion';
-      let autoExecuted = false;
-
-      if (
+      const shouldAutoExecute =
         config?.executionMode === 'auto_execute' &&
         actionData.confidence >= Number(config.confidenceThreshold || 0.95) &&
         actionData.type !== 'no_action' &&
-        actionData.type !== 'flag_for_review'
-      ) {
-        status = 'executed';
-        mode = 'auto';
-        autoExecuted = true;
-      }
+        actionData.type !== 'flag_for_review';
+
+      let status = 'pending';
+      const mode = shouldAutoExecute ? 'auto' : 'suggestion';
+      let autoExecuted = false;
 
       // Step 10: Create action record
       const action = await prisma.agentAction.create({
@@ -317,11 +314,49 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
           changes: actionData.changes,
           confidence: actionData.confidence,
           reasoning: actionData.reasoning,
-          status,
+          status: 'pending',
           mode,
-          ...(status === 'executed' && { executedAt: new Date() }),
         },
       });
+
+      if (shouldAutoExecute) {
+        try {
+          const executionResult = await executeAction({
+            id: action.id,
+            actionType: action.actionType,
+            entityType: action.entityType,
+            entityId: action.entityId,
+            firmId,
+            changes: action.changes as Record<string, { old: any; new: any }>,
+          });
+
+          await prisma.agentAction.update({
+            where: { id: action.id },
+            data: {
+              status: 'executed',
+              executedAt: new Date(),
+              entityType: executionResult.entityType ?? action.entityType,
+              entityId: executionResult.entityId ?? action.entityId,
+            },
+          });
+
+          status = 'executed';
+          autoExecuted = true;
+        } catch (error) {
+          await prisma.agentAction.update({
+            where: { id: action.id },
+            data: {
+              status: 'pending',
+            },
+          });
+
+          await auditLog(firmId, 'agent.action_auto_execute_failed', 'agent_action', action.id, {
+            emailSubject: email.subject,
+            actionType: actionData.type,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
 
       // Audit event
       const auditAction = autoExecuted ? 'agent.action_auto_executed' : 'agent.action_created';

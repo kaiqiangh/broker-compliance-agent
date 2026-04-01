@@ -378,7 +378,7 @@ describe('E2E agent pipeline scenarios', () => {
     });
 
     const action = await prisma.agentAction.findUniqueOrThrow({ where: { id: 'action-confirm' } });
-    await executeAction(action);
+    await executeAction(action as any);
     await prisma.agentAction.update({
       where: { id: 'action-confirm' },
       data: { executedAt: expect.any(Date) },

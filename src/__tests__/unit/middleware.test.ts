@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { middleware } from '@/middleware';
 import { NextRequest } from 'next/server';
 

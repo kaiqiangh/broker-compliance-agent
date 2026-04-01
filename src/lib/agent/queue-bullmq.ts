@@ -105,7 +105,7 @@ function startWorkers() {
   const metricsWorker = new Worker(
     'agent:metrics',
     async () => {
-      const { aggregateDailyMetrics } = await import('@/worker/agent-worker');
+      const { aggregateDailyMetrics } = await import('@/worker/agent-runtime');
       await aggregateDailyMetrics();
     },
     { connection: conn }
@@ -154,7 +154,7 @@ scheduleDailyMetrics().catch(err => {
 
 // ─── Startup metrics run (in-memory fallback) ───────────────
 if (!getRedisConnection()) {
-  import('@/worker/agent-worker').then(({ aggregateDailyMetrics }) => {
+  import('@/worker/agent-runtime').then(({ aggregateDailyMetrics }) => {
     aggregateDailyMetrics().catch(() => {});
   });
 }
@@ -182,7 +182,7 @@ async function processMemoryJob() {
         break;
       }
       case 'aggregate_metrics': {
-        const { aggregateDailyMetrics } = await import('@/worker/agent-worker');
+        const { aggregateDailyMetrics } = await import('@/worker/agent-runtime');
         await aggregateDailyMetrics();
         break;
       }

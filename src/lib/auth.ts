@@ -265,16 +265,30 @@ export async function requireAuthWithPermission(request: Request, permission: Pe
  */
 export function withAuth(
   permission: Permission | null,
-  handler: (user: SessionUser, request: Request) => Promise<Response>
+  handler: (user: SessionUser, request: Request, ...args: any[]) => Promise<Response>
 ) {
-  return async (request: Request): Promise<Response> => {
+  type InjectedUser = { firmId: string; [key: string]: any };
+  type AuthedHandler = {
+    (request: Request, ...args: any[]): Promise<Response>;
+    (user: InjectedUser, request: Request, ...args: any[]): Promise<Response>;
+  };
+
+  const authedHandler: AuthedHandler = async (
+    requestOrUser: Request | InjectedUser,
+    maybeRequest?: Request,
+    ...args: any[]
+  ): Promise<Response> => {
     try {
-      const user = permission
-        ? await requireAuthWithPermission(request, permission)
-        : await requireAuth(request);
+      const isInjectedUser = maybeRequest instanceof Request;
+      const request = (isInjectedUser ? maybeRequest : requestOrUser) as Request;
+      const user = isInjectedUser
+        ? (requestOrUser as SessionUser)
+        : permission
+          ? await requireAuthWithPermission(request, permission)
+          : await requireAuth(request);
 
       // Set firm context for RLS enforcement (auto-scoped, auto-cleared)
-      return runWithFirmContext(user.firmId, () => handler(user, request));
+      return runWithFirmContext(user.firmId, () => handler(user, request, ...args));
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         return Response.json(
@@ -295,4 +309,6 @@ export function withAuth(
       );
     }
   };
+
+  return authedHandler;
 }

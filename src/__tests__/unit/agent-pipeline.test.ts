@@ -9,6 +9,7 @@ vi.mock('@/lib/prisma', () => ({
     agentAction: {
       create: vi.fn(),
       findFirst: vi.fn(),
+      update: vi.fn(),
     },
     policy: {
       findFirst: vi.fn(),
@@ -48,12 +49,21 @@ vi.mock('@/lib/agent/action-generator', () => ({
   generateAction: vi.fn(),
 }));
 
+vi.mock('@/lib/agent/action-executor', () => ({
+  executeAction: vi.fn(),
+}));
+
 vi.mock('@/lib/audit', () => ({
   auditLog: vi.fn(),
 }));
 
 vi.mock('@/app/api/agent/events/route', () => ({
   publishAgentEvent: vi.fn(),
+}));
+
+vi.mock('@/services/agent/notifications', () => ({
+  sendUrgentNotification: vi.fn().mockResolvedValue(undefined),
+  sendAutoExecuteNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { processEmail } from '../../services/agent/pipeline';
@@ -63,6 +73,7 @@ import { extractData } from '@/lib/agent/extractor';
 import { desensitizePII, resensitize } from '@/lib/agent/pii';
 import { matchRecords } from '@/lib/agent/matcher';
 import { generateAction } from '@/lib/agent/action-generator';
+import { executeAction } from '@/lib/agent/action-executor';
 
 describe('processEmail pipeline', () => {
   beforeEach(() => {
@@ -263,16 +274,85 @@ describe('processEmail pipeline', () => {
     });
 
     (prisma.agentAction.create as any).mockResolvedValue({ id: 'action-auto' });
+    (prisma.agentAction.update as any).mockResolvedValue({});
     (prisma.incomingEmail.update as any).mockResolvedValue({});
+    (executeAction as any).mockResolvedValue({ entityType: 'policy', entityId: 'p1' });
 
     const result = await processEmail('email-5');
 
-    // Action should be created with status 'executed' and mode 'auto'
+    expect(result.autoExecuted).toBe(true);
+    expect(executeAction).toHaveBeenCalled();
     expect(prisma.agentAction.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          status: 'executed',
+          status: 'pending',
           mode: 'auto',
+        }),
+      })
+    );
+    expect(prisma.agentAction.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'action-auto' },
+        data: expect.objectContaining({
+          status: 'executed',
+          entityType: 'policy',
+          entityId: 'p1',
+        }),
+      })
+    );
+  });
+
+  it('falls back to pending review when auto-execute fails', async () => {
+    (prisma.incomingEmail.findUnique as any).mockResolvedValue({
+      id: 'email-6',
+      firmId: 'firm-123',
+      bodyText: 'Policy update',
+      subject: 'Update',
+      fromAddress: 'insurer@aviva.ie',
+      status: 'pending_processing',
+    });
+
+    (classifyEmail as any).mockResolvedValue({ isInsurance: true, category: 'policy_renewal', priority: 'normal', confidence: 0.95 });
+    (desensitizePII as any).mockReturnValue({ desensitized: 'test', tokens: [] });
+    (extractData as any).mockResolvedValue({ policyNumber: 'POL-001', newPremium: 1500 });
+    (resensitize as any).mockReturnValue({ policyNumber: 'POL-001', newPremium: 1500 });
+    (matchRecords as any).mockResolvedValue({ policy: { id: 'p1', confidence: 1.0 }, client: { id: 'c1', confidence: 1.0 } });
+    (prisma.policy.findFirst as any).mockResolvedValue({ id: 'p1', premium: 1200, expiryDate: new Date('2027-01-01'), ncb: null, clientId: 'c1' });
+
+    (generateAction as any).mockReturnValue({
+      type: 'update_policy',
+      target: { entityType: 'policy', entityId: 'p1', matchConfidence: 1.0 },
+      changes: { premium: { old: 1200, new: 1500 } },
+      confidence: 0.98,
+      reasoning: 'Updated.',
+    });
+
+    (prisma.emailIngressConfig.findUnique as any).mockResolvedValue({
+      executionMode: 'auto_execute',
+      confidenceThreshold: 0.95,
+    });
+
+    (prisma.agentAction.create as any).mockResolvedValue({ id: 'action-auto-fail' });
+    (prisma.agentAction.update as any).mockResolvedValue({});
+    (prisma.incomingEmail.update as any).mockResolvedValue({});
+    (executeAction as any).mockRejectedValue(new Error('write failed'));
+
+    const result = await processEmail('email-6');
+
+    expect(result.autoExecuted).toBe(false);
+    expect(prisma.agentAction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'pending',
+          mode: 'auto',
+        }),
+      })
+    );
+    expect(prisma.agentAction.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'action-auto-fail' },
+        data: expect.objectContaining({
+          status: 'pending',
         }),
       })
     );
