@@ -143,5 +143,5 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
     data: { id: actionId, actionType: action.actionType },
   });
 
-  return NextResponse.json({ data: { id: actionId, status: 'modified' } });
+  return NextResponse.json({ data: { id: actionId, status: 'executed' } });
 });

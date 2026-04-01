@@ -104,5 +104,5 @@ export const PUT = withAuth('agent:confirm_action', async (user, request) => {
     data: { id: actionId, actionType: action.actionType },
   });
 
-  return NextResponse.json({ data: { id: actionId, status: 'confirmed' } });
+  return NextResponse.json({ data: { id: actionId, status: 'executed' } });
 });
