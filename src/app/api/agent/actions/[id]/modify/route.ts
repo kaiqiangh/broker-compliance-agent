@@ -99,11 +99,12 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
       changes: modifiedChanges,
     });
   } catch (error) {
-    // ROLLBACK: revert status to pending so user can retry
+    // ROLLBACK: revert to pre-modification state so user can retry cleanly
     await prisma.agentAction.update({
       where: { id: actionId },
       data: {
         status: 'pending',
+        changes: currentChanges,
         confirmedBy: null,
         confirmedAt: null,
         modifiedFields: null,

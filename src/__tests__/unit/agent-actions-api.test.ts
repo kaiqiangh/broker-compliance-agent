@@ -239,10 +239,11 @@ describe('PUT /api/agent/actions/:id/modify', () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error.code).toBe('EXECUTION_FAILED');
-    // Should roll back to pending
+    // Should roll back to pending with original changes restored
     const rollbackCall = (prisma.agentAction.update as any).mock.calls.at(-1)[0];
     expect(rollbackCall.data.status).toBe('pending');
     expect(rollbackCall.data.confirmedBy).toBeNull();
+    expect(rollbackCall.data.changes).toEqual({ premium: { old: 1000, new: 1200 } });
     expect(auditLog).toHaveBeenCalledWith(
       'f1',
       'agent.action_modify_failed',
