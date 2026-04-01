@@ -16,7 +16,7 @@ const UPLOADS_ROOT = resolve(process.cwd(), 'uploads');
  * In both cases, the user must be authenticated and the file path must start
  * with the user's firmId (prevents cross-tenant access).
  */
-export const GET = withAuth('view_all', async (user, request) => {
+export const GET = withAuth(null, async (user, request) => {
   const url = new URL(request.url);
   const filePath = url.pathname.replace('/api/files/', '');
 

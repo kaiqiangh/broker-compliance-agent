@@ -58,6 +58,10 @@ function addCorsHeaders(response: NextResponse, request: NextRequest): NextRespo
 async function isValidSession(token: string): Promise<boolean> {
   try {
     await jwtVerify(token, JWT_SECRET, { issuer: JWT_ISSUER });
+    // Note: full revocation check (blocklist + sessionsRevokedAt) happens in
+    // route-level withAuth → getSession(). Middleware only verifies JWT signature
+    // and expiry for UX purposes (redirect to login). API routes are the real
+    // security boundary.
     return true;
   } catch {
     return false;

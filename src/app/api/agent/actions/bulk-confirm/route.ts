@@ -56,11 +56,11 @@ export const POST = withAuth('agent:bulk_confirm', async (user, request) => {
         changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
       });
 
-      // Mark confirmed
+      // Mark as executed
       await prisma.agentAction.update({
         where: { id: action.id },
         data: {
-          status: 'confirmed',
+          status: 'executed',
           confirmedBy: user.id,
           confirmedAt: new Date(),
           executedAt: new Date(),
