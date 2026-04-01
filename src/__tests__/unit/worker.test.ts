@@ -43,6 +43,19 @@ vi.mock('../../lib/pdf', () => ({
   htmlToPdf: vi.fn(),
 }));
 
+vi.mock('../../worker/agent-runtime', () => ({
+  createAgentMaintenanceState: vi.fn(() => ({
+    lastMailboxPollAt: 0,
+    lastMetricsDate: null,
+  })),
+  runAgentMaintenanceTick: vi.fn().mockResolvedValue({
+    requeuedEmails: 0,
+    processedEmails: 0,
+    polledEmails: 0,
+    aggregatedMetrics: false,
+  }),
+}));
+
 vi.mock('fs', () => ({
   promises: {
     mkdir: vi.fn(),
@@ -53,12 +66,14 @@ vi.mock('fs', () => ({
 import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../../services/notification-service';
 import { DocumentService } from '../../services/document-service';
+import { runAgentMaintenanceTick } from '../../worker/agent-runtime';
 import {
   processJobs,
   RETRY_BACKOFF_MS,
   MAX_ATTEMPTS,
   setShuttingDown,
   getIsShuttingDown,
+  runWorkerCycle,
 } from '../../worker/index';
 
 // Worker tests — job claiming + retry logic
@@ -245,6 +260,16 @@ describe('Worker — processJobs()', () => {
 
     const processed = await processJobs();
     expect(processed).toBe(0);
+  });
+
+  it('runWorkerCycle invokes packaged agent maintenance logic', async () => {
+    const state = { lastMailboxPollAt: 0, lastMetricsDate: null };
+    (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const result = await runWorkerCycle(state);
+
+    expect(result.processedJobs).toBe(0);
+    expect(runAgentMaintenanceTick).toHaveBeenCalledWith(state);
   });
 });
 

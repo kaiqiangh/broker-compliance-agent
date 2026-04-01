@@ -4,6 +4,7 @@ import { DocumentService } from '../services/document-service';
 import { InspectionPackService } from '../services/inspection-pack-service';
 import { htmlToPdf } from '../lib/pdf';
 import { getStorage, buildStoragePath } from '../lib/storage';
+import { createAgentMaintenanceState, runAgentMaintenanceTick, type AgentMaintenanceState } from './agent-runtime';
 
 export const POLL_INTERVAL_MS = 30_000; // 30 seconds
 export const RETRY_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes base
@@ -26,14 +27,19 @@ async function main() {
   const notificationService = new NotificationService();
   const catchUpCount = await notificationService.checkAndScheduleReminders();
   if (catchUpCount > 0) console.log(`[Worker] Catch-up: scheduled ${catchUpCount} missed reminders`);
+  const agentMaintenanceState = createAgentMaintenanceState();
 
   // Main loop
   while (!isShuttingDown) {
     try {
-      const processed = await processJobs();
-      if (processed > 0) console.log(`[Worker] Processed ${processed} jobs`);
+      const { processedJobs, maintenance } = await runWorkerCycle(agentMaintenanceState);
+      if (processedJobs > 0) console.log(`[Worker] Processed ${processedJobs} jobs`);
+      if (maintenance.requeuedEmails > 0) console.log(`[Worker] Re-queued ${maintenance.requeuedEmails} stale emails`);
+      if (maintenance.processedEmails > 0) console.log(`[Worker] Processed ${maintenance.processedEmails} pending emails`);
+      if (maintenance.polledEmails > 0) console.log(`[Worker] Polled ${maintenance.polledEmails} mailbox emails`);
+      if (maintenance.aggregatedMetrics) console.log('[Worker] Aggregated agent metrics');
     } catch (err) {
-      console.error('[Worker] Job processing failed:', err);
+      console.error('[Worker] Worker cycle failed:', err);
     }
 
     await sleep(POLL_INTERVAL_MS);
@@ -106,6 +112,16 @@ export async function processJobs(): Promise<number> {
   }
 
   return processed;
+}
+
+export async function runWorkerCycle(agentMaintenanceState: AgentMaintenanceState) {
+  const processedJobs = await processJobs();
+  const maintenance = await runAgentMaintenanceTick(agentMaintenanceState);
+
+  return {
+    processedJobs,
+    maintenance,
+  };
 }
 
 async function executeJob(jobType: string, payload: any) {
