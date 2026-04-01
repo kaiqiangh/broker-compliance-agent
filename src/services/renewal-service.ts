@@ -120,7 +120,7 @@ export class RenewalService {
 
     return renewals.map(renewal => {
       const completedCount = renewal.checklistItems.filter(
-        i => i.status === 'approved'
+        i => i.status === 'approved' || i.status === 'completed'
       ).length;
       const totalCount = renewal.checklistItems.length;
       const calculatedStatus = calculateRenewalStatus(

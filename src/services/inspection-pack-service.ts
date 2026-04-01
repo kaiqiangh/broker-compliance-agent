@@ -35,6 +35,16 @@ interface PackFilters {
   adviserId?: string;
 }
 
+/**
+ * Sanitize CSV field to prevent formula injection.
+ * Prefixes formula-triggering characters with single quote.
+ */
+function sanitizeCsvField(value: string): string {
+  const trimmed = value.trim();
+  if (/^[=+\-@|!\t\r]/.test(trimmed)) return "'" + value;
+  return value.replace(/"/g, '""'); // also escape double quotes
+}
+
 export class InspectionPackService {
   /**
    * Generate a CBI inspection evidence pack as a ZIP file.
@@ -228,12 +238,12 @@ export class InspectionPackService {
       item.completedAt ? new Date(item.completedAt).toISOString() : '',
       item.approvedBy || '',
       item.approvedAt ? new Date(item.approvedAt).toISOString() : '',
-      (item.notes || '').replace(/"/g, '""'),
+      item.notes || '',
     ]);
 
     return [
-      headers.join(','),
-      ...rows.map((r: string[]) => r.map((v: string) => `"${v}"`).join(',')),
+      headers.map(sanitizeCsvField).join(','),
+      ...rows.map((r: string[]) => r.map((v: string) => `"${sanitizeCsvField(v)}"`).join(',')),
     ].join('\n');
   }
 
@@ -251,8 +261,8 @@ export class InspectionPackService {
     ]);
 
     return [
-      headers.join(','),
-      ...rows.map(r => r.map(v => `"${v}"`).join(',')),
+      headers.map(sanitizeCsvField).join(','),
+      ...rows.map(r => r.map(v => `"${sanitizeCsvField(String(v))}"`).join(',')),
     ].join('\n');
   }
 

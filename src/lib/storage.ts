@@ -13,6 +13,18 @@ export interface StorageProvider {
   isCloud(): boolean;
 }
 
+/**
+ * Validate a storage path to prevent path traversal.
+ * Throws if the resolved path escapes the root directory.
+ */
+function validateStoragePath(root: string, storagePath: string): string {
+  const fullPath = path.join(root, storagePath);
+  if (!fullPath.startsWith(root + path.sep) && fullPath !== root) {
+    throw new Error('Invalid storage path: contains path traversal sequences');
+  }
+  return fullPath;
+}
+
 // ─── Local Filesystem ────────────────────────────────────────────────────────
 
 class LocalStorage implements StorageProvider {
@@ -24,7 +36,7 @@ class LocalStorage implements StorageProvider {
 
   async upload(storagePath: string, buffer: Buffer): Promise<string> {
     const fs = await import('fs/promises');
-    const fullPath = path.join(this.root, storagePath);
+    const fullPath = validateStoragePath(this.root, storagePath);
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
     await fs.writeFile(fullPath, buffer);
     return this.getUrl(storagePath);
@@ -32,8 +44,8 @@ class LocalStorage implements StorageProvider {
 
   async download(storagePath: string): Promise<Buffer | null> {
     const fs = await import('fs/promises');
-    const fullPath = path.join(this.root, storagePath);
     try {
+      const fullPath = validateStoragePath(this.root, storagePath);
       return await fs.readFile(fullPath);
     } catch {
       return null;
