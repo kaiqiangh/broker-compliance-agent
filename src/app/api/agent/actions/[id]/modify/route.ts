@@ -88,19 +88,43 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
   });
 
   // Execute the action with modified values
-  const executionResult = await executeAction({
-    id: actionId,
-    actionType: action.actionType,
-    entityType: action.entityType,
-    entityId: action.entityId,
-    firmId: user.firmId,
-    changes: modifiedChanges,
-  });
+  let executionResult;
+  try {
+    executionResult = await executeAction({
+      id: actionId,
+      actionType: action.actionType,
+      entityType: action.entityType,
+      entityId: action.entityId,
+      firmId: user.firmId,
+      changes: modifiedChanges,
+    });
+  } catch (error) {
+    // ROLLBACK: revert status to pending so user can retry
+    await prisma.agentAction.update({
+      where: { id: actionId },
+      data: {
+        status: 'pending',
+        confirmedBy: null,
+        confirmedAt: null,
+        modifiedFields: null,
+      },
+    });
+
+    await auditLog(user.firmId, 'agent.action_modify_failed', 'agent_action', actionId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    return NextResponse.json(
+      { error: { code: 'EXECUTION_FAILED', message: 'Action execution failed. Status reverted to pending. Please retry.' } },
+      { status: 500 }
+    );
+  }
 
   // Mark as executed
   await prisma.agentAction.update({
     where: { id: actionId },
     data: {
+      status: 'executed',
       executedAt: new Date(),
       entityType: executionResult.entityType ?? action.entityType,
       entityId: executionResult.entityId ?? action.entityId,

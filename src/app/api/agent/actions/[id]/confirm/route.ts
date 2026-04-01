@@ -84,6 +84,7 @@ export const PUT = withAuth('agent:confirm_action', async (user, request) => {
   await prisma.agentAction.update({
     where: { id: actionId },
     data: {
+      status: 'executed',
       executedAt: new Date(),
       entityType: executionResult.entityType ?? action.entityType,
       entityId: executionResult.entityId ?? action.entityId,

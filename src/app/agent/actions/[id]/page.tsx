@@ -218,7 +218,7 @@ export default function AgentActionDetailPage() {
         ? `/api/agent/actions/${actionId}/modify`
         : `/api/agent/actions/${actionId}/confirm`;
       const opts = hasModifications
-        ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ changes: modifications }) }
+        ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modifications }) }
         : { method: 'PUT' };
       const res = await fetch(url, opts);
       if (!res.ok) throw new Error('Action failed');
