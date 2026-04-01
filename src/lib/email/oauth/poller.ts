@@ -1,3 +1,4 @@
+import { simpleParser } from 'mailparser';
 import { prisma } from '@/lib/prisma';
 import { decryptToken } from '@/lib/email/oauth/crypto';
 import { enqueueJob } from '@/lib/agent/queue';
@@ -49,9 +50,7 @@ export async function pollConnectedMailboxes(): Promise<number> {
       for (const msg of messages) {
         try {
           // Create incoming email record (dedup handled by unique constraint)
-          const parsed = await import('mailparser').then(m =>
-            m.simpleParser(Buffer.from(msg.raw, 'base64url'))
-          );
+          const parsed = await simpleParser(Buffer.from(msg.raw, 'base64url'));
 
           const messageId = (parsed.messageId || msg.id).replace(/^<|>$/g, '');
           const inReplyTo = parsed.inReplyTo ? parsed.inReplyTo.replace(/^<|>$/g, '') : null;
@@ -89,7 +88,7 @@ export async function pollConnectedMailboxes(): Promise<number> {
         } catch (err: any) {
           // P2002 = duplicate
           if (err.code !== 'P2002') {
-            console.error(`[IMAP Poll] Failed to process message:`, err);
+            console.error(`[OAuth Poll] Failed to process message:`, err);
           }
         }
       }
@@ -100,13 +99,13 @@ export async function pollConnectedMailboxes(): Promise<number> {
         data: { lastPolledAt: new Date(), lastError: null, errorCount: 0 },
       });
     } catch (err) {
-      console.error(`[IMAP Poll] Error for firm ${config.firmId}:`, err);
+      console.error(`[OAuth Poll] Error for firm ${config.firmId}:`, err);
       await prisma.emailIngressConfig.update({
         where: { id: config.id },
         data: {
           lastError: err instanceof Error ? err.message : 'Unknown error',
           errorCount: { increment: 1 },
-          ...(config.errorCount >= 10 && { status: 'error' }),
+          ...(config.errorCount + 1 >= 10 && { status: 'error' }),
         },
       });
     } finally {
