@@ -1,15 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { extractLearningInsights, type LearningInsight } from '@/app/agent/metrics/learning-response';
 
 type TimeRange = '7d' | '14d' | '30d';
-
-interface LearningInsight {
-  field: string;
-  commonMistake: string;
-  suggestedFix: string;
-  occurrences: number;
-}
 
 interface MetricsSummary {
   totalEmails: number;
@@ -327,7 +321,7 @@ export default function AgentMetricsPage() {
       }
       if (learningRes.ok) {
         const lData = await learningRes.json();
-        setInsights(lData.insights ?? []);
+        setInsights(extractLearningInsights(lData));
       }
     } catch {
       // Silent fail
