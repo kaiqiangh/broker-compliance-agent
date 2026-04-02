@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
     incomingEmail: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     agentAction: {
       create: vi.fn(),
@@ -130,6 +131,10 @@ function renewalMocks() {
 describe('E2E agent pipeline scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // FIX Mock updateMany for atomic claim at pipeline start
+    (prisma.incomingEmail.updateMany as any).mockResolvedValue({ count: 1 });
+    // FIX: Mock agentAction.findFirst for idempotent lookup (returns null → new create)
+    (prisma.agentAction.findFirst as any).mockResolvedValue(null);
   });
 
   // ── Scenario 1: renewal → update ──
@@ -300,6 +305,8 @@ describe('E2E agent pipeline scenarios', () => {
 
   // ── Scenario 4: duplicate → dedupe (idempotent) ──
   it('already-processed email → returns immediately, no new action', async () => {
+    // Atomic claim fails for already-processed email (count=0)
+    (prisma.incomingEmail.updateMany as any).mockResolvedValue({ count: 0 });
     (prisma.incomingEmail.findUnique as any).mockResolvedValue(
       makeEmail({
         id: 'e2e-dup',

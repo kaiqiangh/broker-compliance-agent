@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
     incomingEmail: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     agentAction: {
       create: vi.fn(),
@@ -78,6 +79,10 @@ import { executeAction } from '@/lib/agent/action-executor';
 describe('processEmail pipeline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // FIX: Mock updateMany for atomic claim at pipeline start
+    (prisma.incomingEmail.updateMany as any).mockResolvedValue({ count: 1 });
+    // FIX: Mock agentAction.findFirst for idempotent lookup (returns null → new create)
+    (prisma.agentAction.findFirst as any).mockResolvedValue(null);
   });
 
   it('processes insurance renewal email end-to-end', async () => {
@@ -199,44 +204,57 @@ describe('processEmail pipeline', () => {
   });
 
   it('handles email already processed (idempotent)', async () => {
-    (prisma.incomingEmail.findUnique as any).mockResolvedValue({
-      id: 'email-3',
-      firmId: 'firm-123',
-      status: 'processed',
-    });
+    // With atomic claim, updateMany returns count=0 for already-processed emails
+    (prisma.incomingEmail.updateMany as any).mockResolvedValue({ count: 0 });
 
     const result = await processEmail('email-3');
 
     // Should not call any pipeline steps
+    expect(result.classification).toBeNull();
+    expect(result.action).toBeNull();
+    expect(result.autoExecuted).toBe(false);
     expect(classifyEmail).not.toHaveBeenCalled();
   });
 
-  it('handles email not found', async () => {
-    (prisma.incomingEmail.findUnique as any).mockResolvedValue(null);
+  it('handles email not found (atomic claim returns 0)', async () => {
+    // With atomic claim, non-existent email → updateMany returns count=0
+    (prisma.incomingEmail.updateMany as any).mockResolvedValue({ count: 0 });
 
-    await expect(processEmail('nonexistent')).rejects.toThrow('Email not found');
+    const result = await processEmail('nonexistent');
+
+    // Should silently skip (no error thrown — another worker may have claimed it)
+    expect(result.classification).toBeNull();
+    expect(result.action).toBeNull();
   });
 
-  it('marks email as error on pipeline failure', async () => {
+  it('marks email as error on pipeline failure (no progress)', async () => {
+    // Claim succeeds (count=1), then findUnique fails — simulating email not found
+    (prisma.incomingEmail.updateMany as any).mockResolvedValueOnce({ count: 1 });
+    (prisma.incomingEmail.findUnique as any).mockResolvedValue(null);
+
+    await expect(processEmail('email-4')).rejects.toThrow('Email not found after claim');
+  });
+
+  it('retries classify failure (pipelineStep was set before error)', async () => {
     (prisma.incomingEmail.findUnique as any).mockResolvedValue({
       id: 'email-4',
       firmId: 'firm-123',
       bodyText: 'test',
       subject: 'test',
       fromAddress: 'test@test.ie',
-      status: 'pending_processing',
     });
 
     (classifyEmail as any).mockRejectedValue(new Error('LLM timeout'));
-    (prisma.incomingEmail.update as any).mockResolvedValue({});
 
     await expect(processEmail('email-4')).rejects.toThrow('LLM timeout');
 
-    // Should mark email as error
-    expect(prisma.incomingEmail.update).toHaveBeenCalledWith(
+    // First updateMany: atomic claim (pending → processing)
+    // Second updateMany: retry reset (pipelineStep was 'classify' so retry)
+    expect(prisma.incomingEmail.updateMany).toHaveBeenCalledTimes(2);
+    expect(prisma.incomingEmail.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          status: 'error',
+          status: 'pending_processing',
           errorMessage: 'LLM timeout',
         }),
       })

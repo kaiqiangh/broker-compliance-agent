@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
     incomingEmail: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     agentAction: {
       create: vi.fn(),
