@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { auditLog } from '@/lib/audit';
 import { checkRateLimit } from '@/lib/rate-limit';
 
-export const POST = withAuth(null, async (user, _request) => {
+export const POST = withAuth('agent:configure', async (user, _request) => {
   const rl = await checkRateLimit(`api:oauth:imap:disconnect:${user.id}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Rate limit exceeded', retryAfter: rl.retryAfter }, { status: 429 });

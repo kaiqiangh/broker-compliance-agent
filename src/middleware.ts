@@ -6,6 +6,11 @@ const JWT_SECRET_RAW = process.env.NEXTAUTH_SECRET || '';
 const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 const JWT_ISSUER = 'broker-comply';
 
+// Startup warning: fail-safe for missing ALLOWED_ORIGIN in production
+if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGIN) {
+  console.warn('[SECURITY] ALLOWED_ORIGIN not set in production — CORS requests from any origin will be rejected. Set ALLOWED_ORIGIN env var.');
+}
+
 // Routes that don't require auth
 const PUBLIC_PATHS = [
   '/login',
@@ -32,22 +37,30 @@ function getCsrfTokenFromHeader(request: NextRequest): string | undefined {
 }
 
 function handleCorsPreflight(request: NextRequest): NextResponse {
-  const origin = request.headers.get('origin') ?? '*';
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
+  const origin = request.headers.get('origin') ?? '';
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
 
   const response = new NextResponse(null, { status: 204 });
-  response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+  if (allowedOrigin && origin === allowedOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  } else if (!allowedOrigin) {
+    // No ALLOWED_ORIGIN set — reject all CORS (don't default to localhost)
+    response.headers.set('Access-Control-Allow-Origin', 'null');
+  } else {
+    // Origin doesn't match — don't send credentials
+    response.headers.set('Access-Control-Allow-Origin', 'null');
+  }
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
   response.headers.set('Access-Control-Max-Age', '86400');
   return response;
 }
 
 function addCorsHeaders(response: NextResponse, request: NextRequest): NextResponse {
   const origin = request.headers.get('origin');
-  if (origin) {
-    const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
+  if (origin && allowedOrigin && origin === allowedOrigin) {
     response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
     response.headers.set('Access-Control-Expose-Headers', 'Set-Cookie');
