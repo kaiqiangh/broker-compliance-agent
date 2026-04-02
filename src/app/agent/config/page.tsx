@@ -34,6 +34,8 @@ export default function AgentConfigPage() {
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
 
   // IMAP form state
   const [imapServer, setImapServer] = useState('gmail');
@@ -229,6 +231,34 @@ export default function AgentConfigPage() {
           >
             Generate Forwarding Address
           </button>
+        )}
+
+        {/* Test Email — PRD §6.4 Tab 1 */}
+        {config.forwardingAddress && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <button
+              onClick={async () => {
+                setTestingEmail(true);
+                try {
+                  const res = await fetch('/api/agent/config/test-email', { method: 'POST' });
+                  if (!res.ok) throw new Error('Failed');
+                  const data = await res.json();
+                  setTestEmailResult(data.received ? '✅ Test email received recently — agent is working!' : '⚠️ No recent test email received — check your forwarding setup.');
+                } catch {
+                  setTestEmailResult('❌ Test failed — check agent configuration.');
+                } finally {
+                  setTestingEmail(false);
+                }
+              }}
+              disabled={testingEmail}
+              className="px-4 py-2 text-sm font-medium border border-gray-200 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {testingEmail ? 'Checking...' : '📧 Send Test Email'}
+            </button>
+            {testEmailResult && (
+              <p className="mt-2 text-xs text-gray-500">{testEmailResult}</p>
+            )}
+          </div>
         )}
       </section>
 
