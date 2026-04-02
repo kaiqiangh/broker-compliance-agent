@@ -81,7 +81,7 @@ export async function matchRecords(
     }
 
     // Fuzzy match — pre-filter by prefix + length to avoid O(500) Levenshtein on every email
-    const prefix = normalized.slice(0, 3);
+    const prefix = normalized.slice(0, 2);
     const lenMin = Math.max(1, normalized.length - 3);
     const lenMax = normalized.length + 3;
 
@@ -91,7 +91,7 @@ export async function matchRecords(
         policyStatus: 'active',
         policyNumberNormalized: { startsWith: prefix },
       },
-      take: 100,
+      take: 200,
       orderBy: { policyNumberNormalized: 'asc' },
     });
 
