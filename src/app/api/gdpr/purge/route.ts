@@ -22,7 +22,7 @@ export const POST = withAuth('admin', async (user, request) => {
   const years = parseInt(url.searchParams.get('years') || '6', 10);
   const dryRun = url.searchParams.get('dryRun') === 'true';
 
-  if (years < 1 || years > 20) {
+  if (isNaN(years) || years < 1 || years > 20) {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'years must be 1-20' } }, { status: 400 });
   }
 

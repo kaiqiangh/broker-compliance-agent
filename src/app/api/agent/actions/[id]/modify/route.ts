@@ -5,6 +5,7 @@ import { auditLog } from '@/lib/audit';
 import { executeAction } from '@/lib/agent/action-executor';
 import { publishAgentEvent } from '@/app/api/agent/events/route';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { Prisma } from '@prisma/client';
 
 export const PUT = withAuth('agent:modify_action', async (user, request) => {
   const rl = await checkRateLimit(`api:actions:modify:${user.id}`, 60, 60_000);
@@ -15,6 +16,14 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
   const actionId = pathParts[pathParts.length - 2];
+
+  // FIX: Field-level allowlist — prevent arbitrary key injection
+  const ALLOWED_MODIFY_FIELDS = new Set([
+    'premium', 'expiry_date', 'ncb', 'clientName', 'clientEmail', 'clientPhone',
+    'policyNumber', 'policyType', 'insurerName', 'inceptionDate', 'coverDetails',
+    'commissionRate', 'claimAmount', 'status', 'statusUpdate', 'cancellationDate',
+    'refundAmount', 'settlementAmount', 'claimNumber', 'reason',
+  ]);
 
   // Parse modifications from request body
   let body: { modifications?: Record<string, any>; reason?: string };
@@ -27,11 +36,30 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
     );
   }
 
+  // FIX: Field-level allowlist — prevent arbitrary key injection into changes JSON
+  const ALLOWED_MODIFY_FIELDS = new Set([
+    'premium', 'expiry_date', 'ncb', 'clientName', 'clientEmail', 'clientPhone',
+    'policyNumber', 'policyType', 'insurerName', 'inceptionDate', 'coverDetails',
+    'commissionRate', 'claimAmount', 'status', 'statusUpdate', 'cancellationDate',
+    'refundAmount', 'settlementAmount', 'claimNumber', 'reason',
+  ]);
+
   const modifications = body.modifications || {};
 
   if (Object.keys(modifications).length === 0) {
     return NextResponse.json(
       { error: { code: 'BAD_REQUEST', message: 'No modifications provided' } },
+      { status: 400 }
+    );
+  }
+
+  // Validate each modification field is in allowlist
+  const unknownFields = Object.keys(modifications).filter(
+    (k) => !ALLOWED_MODIFY_FIELDS.has(k)
+  );
+  if (unknownFields.length > 0) {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: `Unknown fields: ${unknownFields.join(', ')}` } },
       { status: 400 }
     );
   }
@@ -124,7 +152,7 @@ export const PUT = withAuth('agent:modify_action', async (user, request) => {
         changes: currentChanges,
         confirmedBy: null,
         confirmedAt: null,
-        modifiedFields: null,
+        modifiedFields: Prisma.DbNull,
       },
     });
 

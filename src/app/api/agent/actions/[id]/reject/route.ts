@@ -17,7 +17,7 @@ export const PUT = withAuth('agent:reject_action', async (user, request) => {
   let reason = '';
   try {
     const body = await request.json();
-    reason = body.reason || '';
+    reason = (body.reason || '').slice(0, 1000);
   } catch {}
 
   // Atomic: reject only if still pending (prevents race with confirm/modify)
