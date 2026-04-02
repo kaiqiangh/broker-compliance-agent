@@ -48,10 +48,14 @@ export async function executeAction(action: ExecutableAction): Promise<Execution
     }
 
     case 'create_client': {
+      const clientName = changes.name?.new?.trim();
+      if (!clientName) {
+        throw new Error('Cannot create client: no client name extracted from email');
+      }
       const client = await prisma.client.create({
         data: {
           firmId: action.firmId,
-          name: changes.name?.new || 'Unknown',
+          name: clientName,
           email: changes.email?.new || null,
           phone: changes.phone?.new || null,
         },
