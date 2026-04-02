@@ -188,32 +188,27 @@ export async function aggregateDailyMetrics(): Promise<void> {
 export async function detectStaleEmails(): Promise<number> {
   const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
 
-  const staleEmails = await prisma.incomingEmail.findMany({
+  // FIX: Atomic updateMany — no TOCTOU window where a completing email
+  // gets reset back to pending_processing after finishing successfully.
+  // If the email transitions to 'processed' between our check and update,
+  // the WHERE clause won't match and it won't be touched.
+  const result = await prisma.incomingEmail.updateMany({
     where: {
       status: 'processing',
       processingStartedAt: { lt: staleThreshold },
     },
-    select: { id: true },
+    data: {
+      status: 'pending_processing',
+      processingStartedAt: null,
+      errorMessage: 'Processing timeout, re-queued',
+    },
   });
 
-  let requeued = 0;
-  for (const email of staleEmails) {
-    await prisma.incomingEmail.update({
-      where: { id: email.id },
-      data: {
-        status: 'pending_processing',
-        processingStartedAt: null,
-        errorMessage: 'Processing timeout, re-queued',
-      },
-    });
-    requeued++;
+  if (result.count > 0) {
+    console.warn(`Re-queued ${result.count} stale emails`);
   }
 
-  if (requeued > 0) {
-    console.warn(`Re-queued ${requeued} stale emails`);
-  }
-
-  return requeued;
+  return result.count;
 }
 
 export async function hasAggregatedMetricsForDate(date: Date): Promise<boolean> {

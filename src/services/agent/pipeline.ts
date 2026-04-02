@@ -24,15 +24,17 @@ export interface ProcessingResult {
 }
 
 export async function processEmail(emailId: string): Promise<ProcessingResult> {
-  // Fetch email
-  const email = await prisma.incomingEmail.findUnique({
-    where: { id: emailId },
+  // FIX: Atomic claim — only one worker can process this email at a time.
+  // updateMany with WHERE status='pending_processing' is atomic (no TOCTOU).
+  // The stale detector (detectStaleEmails) resets stuck emails back to
+  // 'pending_processing', so this also handles resumption safely.
+  const claim = await prisma.incomingEmail.updateMany({
+    where: { id: emailId, status: 'pending_processing' },
+    data: { status: 'processing', processingStartedAt: new Date() },
   });
 
-  if (!email) throw new Error('Email not found');
-
-  // Idempotency: skip if already processed
-  if (email.status === 'processed') {
+  if (claim.count === 0) {
+    // Another worker already claimed it, or it's already processed/error
     return {
       emailId,
       classification: null,
@@ -40,6 +42,13 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
       autoExecuted: false,
     };
   }
+
+  // Re-fetch email after atomic claim (need full data for pipeline)
+  const email = await prisma.incomingEmail.findUnique({
+    where: { id: emailId },
+  });
+
+  if (!email) throw new Error('Email not found after claim');
 
   const firmId = email.firmId;
 
@@ -63,10 +72,11 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
 
       // ── Step 1: Classify ──
       if (startStep === 'classify') {
-        // Set status to processing
+        // Status already set to 'processing' by atomic claim above.
+        // Just update pipelineStep for resume tracking.
         await prisma.incomingEmail.update({
           where: { id: emailId },
-          data: { status: 'processing', pipelineStep: 'classify', processingStartedAt: new Date() },
+          data: { pipelineStep: 'classify' },
         });
 
         // Parallel: desensitize bodyText + fetch attachments (both independent)
@@ -304,22 +314,31 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
       const mode = shouldAutoExecute ? 'auto' : 'suggestion';
       let autoExecuted = false;
 
-      // Step 10: Create action record
-      const action = await prisma.agentAction.create({
-        data: {
-          firmId,
-          emailId,
-          actionType: actionData.type,
-          entityType: actionData.target.entityType,
-          entityId: actionData.target.entityId,
-          matchConfidence: actionData.target.matchConfidence,
-          changes: actionData.changes,
-          confidence: actionData.confidence,
-          reasoning: actionData.reasoning,
-          status: 'pending',
-          mode,
-        },
+      // Step 10: Idempotent action creation
+      // FIX: Check if an action already exists for this email (in case of
+      // retry after crash). This prevents duplicate actions.
+      let action = await prisma.agentAction.findFirst({
+        where: { emailId, firmId },
+        orderBy: { createdAt: 'desc' },
       });
+
+      if (!action) {
+        action = await prisma.agentAction.create({
+          data: {
+            firmId,
+            emailId,
+            actionType: actionData.type,
+            entityType: actionData.target.entityType,
+            entityId: actionData.target.entityId,
+            matchConfidence: actionData.target.matchConfidence,
+            changes: actionData.changes,
+            confidence: actionData.confidence,
+            reasoning: actionData.reasoning,
+            status: 'pending',
+            mode,
+          },
+        });
+      }
 
       if (shouldAutoExecute) {
         try {
@@ -415,30 +434,36 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
       };
 
     } catch (error) {
-      // If we had made progress (pipelineStep is set beyond classify), allow retry from last step
-      // Otherwise mark as error
-      const emailState = await prisma.incomingEmail.findUnique({
-        where: { id: emailId },
-        select: { pipelineStep: true },
+      // FIX: Use atomic update to avoid overwriting a successfully processed email.
+      // If another concurrent run already marked it 'processed', this update
+      // will count=0 and not revert it.
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      // Try to reset to pending (allows retry from last pipelineStep) only if
+      // status is still 'processing' (our claim is still held)
+      const retryUpdate = await prisma.incomingEmail.updateMany({
+        where: {
+          id: emailId,
+          status: 'processing',
+          pipelineStep: { not: null },  // had progress — can resume
+        },
+        data: {
+          status: 'pending_processing',
+          errorMessage,
+        },
       });
 
-      if (emailState?.pipelineStep && emailState.pipelineStep !== 'classify') {
-        // Had progress — reset to pending so worker retries
-        await prisma.incomingEmail.update({
-          where: { id: emailId },
-          data: {
-            status: 'pending_processing',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            // Keep pipelineStep so we resume from last successful step
+      if (retryUpdate.count === 0) {
+        // No progress was made (pipelineStep was null) → permanent error
+        await prisma.incomingEmail.updateMany({
+          where: {
+            id: emailId,
+            status: 'processing',
+            pipelineStep: null,
           },
-        });
-      } else {
-        // No progress — permanent error
-        await prisma.incomingEmail.update({
-          where: { id: emailId },
           data: {
             status: 'error',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            errorMessage,
             pipelineStep: null,
           },
         });

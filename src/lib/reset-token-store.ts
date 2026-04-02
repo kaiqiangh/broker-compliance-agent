@@ -26,26 +26,32 @@ export async function createResetToken(userId: string): Promise<string> {
 
 /**
  * Consume a password reset token.
- * Hashes the input token and looks up by hash.
- * Marks it as used to prevent reuse (race-condition safe via find + update).
+ * Hashes the input token and atomically claims it.
+ * Marks it as used to prevent reuse (race-condition safe via updateMany).
  * Returns the userId if valid, null otherwise.
  */
 export async function consumeResetToken(token: string): Promise<string | null> {
   const tokenHash = hashToken(token);
 
+  // Atomic claim: only mark as used if not already used and not expired.
+  // Two concurrent requests: only one gets count=1, the other sees count=0.
+  const claimed = await prisma.passwordResetToken.updateMany({
+    where: {
+      token: tokenHash,
+      used: false,
+      expiresAt: {
+        gt: new Date(),
+      },
+    },
+    data: { used: true },
+  });
+
+  if (claimed.count === 0) return null;
+
+  // Now fetch to get the userId
   const resetToken = await prisma.passwordResetToken.findUnique({
     where: { token: tokenHash },
   });
 
-  if (!resetToken) return null;
-  if (resetToken.used) return null;
-  if (resetToken.expiresAt <= new Date()) return null;
-
-  // Mark as used — even if concurrent requests race, the second will see used=true
-  await prisma.passwordResetToken.update({
-    where: { id: resetToken.id },
-    data: { used: true },
-  });
-
-  return resetToken.userId;
+  return resetToken?.userId ?? null;
 }
