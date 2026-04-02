@@ -32,7 +32,7 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
     );
   }
 
-  // Check 24h window before atomic claim
+  // Pre-check 24h window (fast rejection). Re-verified after atomic claim to prevent TOCTOU.
   const executedAt = action.executedAt || action.confirmedAt;
   if (executedAt) {
     const hoursSince = (Date.now() - executedAt.getTime()) / (1000 * 60 * 60);
@@ -59,6 +59,21 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
       reversalReason: reason,
     },
   });
+
+  // Post-claim TOCTOU guard: re-verify 24h window inside the claim
+  if (claim.count > 0 && executedAt) {
+    const postClaimAge = (Date.now() - executedAt.getTime()) / (1000 * 60 * 60);
+    if (postClaimAge > 24) {
+      await prisma.agentAction.update({
+        where: { id: actionId },
+        data: { isReversed: false, reversedBy: null, reversedAt: null, reversalReason: null },
+      });
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: 'Reversal window expired (24 hours)' } },
+        { status: 400 }
+      );
+    }
+  }
 
   if (claim.count === 0) {
     // Check if already reversed or wrong status
@@ -108,6 +123,7 @@ export const PUT = withAuth('agent:reverse_action', async (user, request) => {
           if (changes.expiry_date) {
             const renewal = await prisma.renewal.findFirst({
               where: { policyId: action.entityId, firmId: user.firmId, status: { not: 'compliant' } },
+              orderBy: { dueDate: 'desc' },
             });
             if (renewal) {
               await prisma.renewal.update({

@@ -50,19 +50,37 @@ export const POST = withAuth('agent:bulk_confirm', async (user, request) => {
 
   for (const action of actions) {
     try {
-      // Execute action (handles ALL action types)
-      const executionResult = await executeAction({
-        ...action,
-        changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
+      // Atomic claim: only execute if still pending (prevents race condition)
+      const claim = await prisma.agentAction.updateMany({
+        where: { id: action.id, firmId: user.firmId, status: 'pending' },
+        data: { status: 'confirmed', confirmedBy: user.id, confirmedAt: new Date() },
       });
+      if (claim.count === 0) {
+        errors.push({ id: action.id, error: 'Action already confirmed/rejected' });
+        continue;
+      }
+
+      // Execute action (handles ALL action types)
+      let executionResult;
+      try {
+        executionResult = await executeAction({
+          ...action,
+          changes: (action.changes || {}) as Record<string, { old: any; new: any }>,
+        });
+      } catch (execErr) {
+        // Rollback: revert to pending so user can retry
+        await prisma.agentAction.update({
+          where: { id: action.id },
+          data: { status: 'pending', confirmedBy: null, confirmedAt: null },
+        });
+        throw execErr;
+      }
 
       // Mark as executed
       await prisma.agentAction.update({
         where: { id: action.id },
         data: {
           status: 'executed',
-          confirmedBy: user.id,
-          confirmedAt: new Date(),
           executedAt: new Date(),
           entityType: executionResult.entityType ?? action.entityType,
           entityId: executionResult.entityId ?? action.entityId,

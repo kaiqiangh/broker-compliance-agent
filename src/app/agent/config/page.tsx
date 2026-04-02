@@ -272,28 +272,31 @@ export default function AgentConfigPage() {
         </div>
 
         {config.executionMode === 'auto_execute' && (
-          <div className="mt-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-lg mb-4">
-            ⚠️ Auto-execute mode: actions above the confidence threshold will be executed automatically. You can undo within 24 hours.
+          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-amber-800 text-sm mb-4">
+            ⚠️ Auto-execute 模式下，confidence ≥ {Math.round(config.confidenceThreshold * 100)}% 的 action 会自动执行。所有操作可 24h 内 undo。
           </div>
         )}
 
         {config.executionMode === 'auto_execute' && (
           <div>
             <label className="text-xs text-gray-500 block mb-2">
-              Confidence Threshold: {Math.round(config.confidenceThreshold * 100)}%
+              Confidence Threshold
             </label>
-            <input
-              type="range"
-              min="80"
-              max="99"
-              value={Math.round(config.confidenceThreshold * 100)}
-              onChange={(e) => saveConfig({ confidenceThreshold: parseInt(e.target.value) / 100 })}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>80%</span>
-              <span>99%</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={80}
+                max={99}
+                value={Math.round(config.confidenceThreshold * 100)}
+                onChange={(e) => {
+                  const val = Math.min(99, Math.max(80, parseInt(e.target.value) || 80));
+                  saveConfig({ confidenceThreshold: val / 100 });
+                }}
+                className="w-20 border border-gray-200 rounded-md p-2 text-sm text-center"
+              />
+              <span className="text-sm text-gray-500">%</span>
             </div>
+            <p className="text-xs text-gray-400 mt-1">Range: 80–99%</p>
           </div>
         )}
       </section>
@@ -523,12 +526,16 @@ export default function AgentConfigPage() {
           {config.digestEnabled !== false && (
             <div className="ml-7">
               <label className="text-xs font-medium text-gray-500 block mb-1">Digest Delivery Time</label>
-              <input
-                type="time"
+              <select
                 value={config.digestTime || '08:00'}
                 onChange={(e) => saveConfig({ digestTime: e.target.value })}
                 className="border border-gray-200 rounded-md p-2 text-sm"
-              />
+              >
+                <option value="06:00">06:00</option>
+                <option value="08:00">08:00</option>
+                <option value="10:00">10:00</option>
+                <option value="12:00">12:00</option>
+              </select>
             </div>
           )}
 

@@ -176,8 +176,9 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
             let total = 0;
             const parts: string[] = [];
             for (const te of threadEmails) {
-              const snippet = (te.bodyText || '').slice(0, 200);
-              const part = `From: ${te.fromAddress}\n${snippet}`;
+              const rawSnippet = (te.bodyText || '').slice(0, 200);
+              const desensitizedSnippet = desensitizePII(rawSnippet).desensitized;
+              const part = `From: ${desensitizePII(te.fromAddress || '').desensitized}\n${desensitizedSnippet}`;
               if (total + part.length > 1000) break;
               parts.push(part);
               total += part.length;
@@ -344,10 +345,13 @@ export async function processEmail(emailId: string): Promise<ProcessingResult> {
           status = 'executed';
           autoExecuted = true;
         } catch (error) {
+          // BUG-04 FIX: auto-execute failed → set mode to 'suggestion' so user reviews manually
+          // Prevents infinite auto-retry loop (e.g., policy not found, LLM hallucination)
           await prisma.agentAction.update({
             where: { id: action.id },
             data: {
               status: 'pending',
+              mode: 'suggestion',
             },
           });
 

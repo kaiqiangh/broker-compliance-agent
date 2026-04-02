@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 <html>
 <body style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <h2 style="color: #2563eb;">Reset your password</h2>
-  <p>Hi ${user.name},</p>
+  <p>Hi ${(user.name || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#x27;'}[c]||c))},</p>
   <p>We received a request to reset your BrokerComply password. Click the button below to set a new password. This link expires in 15 minutes.</p>
   <p><a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
   <p>If you didn't request a password reset, you can safely ignore this email. Your password will not change.</p>

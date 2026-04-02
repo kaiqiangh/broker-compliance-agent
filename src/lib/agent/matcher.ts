@@ -80,10 +80,18 @@ export async function matchRecords(
       return result;
     }
 
-    // Fuzzy match
+    // Fuzzy match — pre-filter by prefix + length to avoid O(500) Levenshtein on every email
+    const prefix = normalized.slice(0, 3);
+    const lenMin = Math.max(1, normalized.length - 3);
+    const lenMax = normalized.length + 3;
+
     const candidates = await prisma.policy.findMany({
-      where: { firmId, policyStatus: 'active' },
-      take: 500,
+      where: {
+        firmId,
+        policyStatus: 'active',
+        policyNumberNormalized: { startsWith: prefix },
+      },
+      take: 100,
       orderBy: { policyNumberNormalized: 'asc' },
     });
 
@@ -91,7 +99,10 @@ export async function matchRecords(
     let bestScore = 0;
 
     for (const candidate of candidates) {
-      const score = similarity(normalized, candidate.policyNumberNormalized || '');
+      const cnorm = candidate.policyNumberNormalized || '';
+      // Quick length filter before expensive Levenshtein
+      if (cnorm.length < lenMin || cnorm.length > lenMax) continue;
+      const score = similarity(normalized, cnorm);
       if (score > bestScore && score >= threshold) {
         bestScore = score;
         bestPolicy = candidate;

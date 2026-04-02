@@ -404,8 +404,10 @@ export default function AgentMetricsPage() {
         </div>
       )}
 
-      {/* Learning Insights */}
-      {insights.length > 0 && (
+      {/* Learning Insights — filtered (occurrences >= 2), sorted desc by occurrences */}
+      {(() => {
+        const filtered = insights.filter(i => i.occurrences >= 2).sort((a, b) => b.occurrences - a.occurrences);
+        return filtered.length > 0 ? (
         <div className="border border-gray-200 rounded-lg p-6">
           <p className="text-xs text-gray-500 mb-4">Learning Insights (corrections applied ≥2 times)</p>
           <div className="overflow-x-auto">
@@ -419,7 +421,7 @@ export default function AgentMetricsPage() {
                 </tr>
               </thead>
               <tbody>
-                {insights.map((insight, i) => (
+                {filtered.map((insight, i) => (
                   <tr key={i} className="border-b border-gray-50">
                     <td className="py-2 pr-4 font-medium text-gray-900">{insight.field}</td>
                     <td className="py-2 pr-4 text-red-600">{insight.commonMistake || <span className="text-gray-400 italic">empty</span>}</td>
@@ -431,7 +433,13 @@ export default function AgentMetricsPage() {
             </table>
           </div>
         </div>
-      )}
+        ) : (
+        <div className="border border-gray-200 rounded-lg p-6">
+          <p className="text-xs text-gray-500 mb-4">Learning Insights</p>
+          <p className="text-sm text-gray-400">No patterns detected yet</p>
+        </div>
+        );
+      })()}
     </div>
   );
 }

@@ -168,6 +168,7 @@ async function updateLinkedRenewal(
 
   const renewal = await prisma.renewal.findFirst({
     where: { policyId, status: { not: 'compliant' } },
+    orderBy: { dueDate: 'desc' },
   });
 
   if (renewal) {

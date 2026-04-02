@@ -24,8 +24,9 @@ export const GET = withAuth(null, async (user, request) => {
     return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'No file path provided' } }, { status: 400 });
   }
 
-  // Security: ensure file path starts with user's firmId
-  if (!filePath.startsWith(user.firmId + '/')) {
+  // Security: ensure file path starts with user's firmId (segment-based, not prefix)
+  const firstSegment = filePath.split('/')[0];
+  if (firstSegment !== user.firmId) {
     return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Access denied' } }, { status: 403 });
   }
 

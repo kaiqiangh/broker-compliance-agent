@@ -47,9 +47,9 @@ export function desensitizePII(text: string): DesensitizeResult {
     }
   );
 
-  // PPS numbers (7 digits + 1-2 letters, case-insensitive)
+  // PPS numbers (7 digits + 1-2 letters, optional space between digits and letters)
   result = result.replace(
-    /\b(\d{7}[A-Za-z]{1,2})\b/g,
+    /\b(\d{7}\s?[A-Za-z]{1,2})\b/g,
     (match) => {
       if (match.includes('{')) return match;
       const token = `{PPS_${++counter}}`;
@@ -129,6 +129,20 @@ export function desensitizePII(text: string): DesensitizeResult {
       const token = `{CLIENT_NAME_${++counter}}`;
       tokens.push({ token, original: name, type: 'name' });
       return `${closing} ${token}`;
+    }
+  );
+
+  // Eircodes (Irish postal codes: A65 F4E2 format)
+  result = result.replace(
+    /\b([A-Z]\d{2}\s?[A-Z\d]{4})\b/g,
+    (match) => {
+      if (match.includes('{')) return match;
+      // Must match Eircode format: letter + 2 digits + space? + 4 alphanum
+      const clean = match.replace(/\s/g, '');
+      if (!/^\w\d{2}[A-Z\d]{4}$/.test(clean)) return match;
+      const token = `{EIRCODE_${++counter}}`;
+      tokens.push({ token, original: match, type: 'eircode' });
+      return token;
     }
   );
 
